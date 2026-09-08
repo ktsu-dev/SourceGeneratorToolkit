@@ -1,0 +1,6 @@
+{
+  "things": [
+    { "name": "Alpha", "kind": "first" },
+    { "name": "Beta", "kind": "second" }
+  ]
+}

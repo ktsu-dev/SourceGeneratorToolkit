@@ -1,0 +1,32 @@
+<Project>
+  <Sdk Name="MSTest.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <IsTestProject>true</IsTestProject>
+    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <TestingPlatformShowTestsFailure>true</TestingPlatformShowTestsFailure>
+    <TestingPlatformShowTestsFailureDetails>true</TestingPlatformShowTestsFailureDetails>
+    <!-- The fixture metadata models are System.Text.Json DTOs: the deserializer needs a settable
+         List<T>, which CA1002 and CA2227 both object to. Real consumers' metadata models have the
+         same shape, so the fixtures keep it rather than deserializing into something unrepresentative. -->
+    <NoWarn>$(NoWarn);CA1002;CA2227</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SourceGeneratorToolkit\SourceGeneratorToolkit.csproj" />
+    <ProjectReference Include="..\SourceGeneratorToolkit.Testing\SourceGeneratorToolkit.Testing.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="ktsu.CodeBlocker" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="Metadata\*.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,40 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <!-- A Roslyn component loads into the compiler, which resolves analyzer assemblies against
+         netstandard2.0. The SDK's default target set would be assemblies the analyzer host cannot
+         load, so it is overridden here rather than added to. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <!-- RS1035 bans the APIs an analyzer must not touch (file system, environment, threading).
+         It is left on: everything in this project runs inside the compiler. Test-harness code,
+         which legitimately reads files, lives in SourceGeneratorToolkit.Testing instead. -->
+    <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Roslyn is supplied by the analyzer host, and a consuming generator references it at
+         whatever version it builds against, so it must not flow as a package dependency.
+         ktsu.CodeBlocker and System.Text.Json do flow: consumers write templates against the
+         first and metadata models against the second. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    <!-- Roslyn is built on ImmutableArray, so the analyzer host always supplies it; referenced
+         explicitly because KTSU0006 does not accept a transitive type, and private for the same
+         reason Roslyn itself is. -->
+    <PackageReference Include="System.Collections.Immutable" PrivateAssets="all" />
+    <PackageReference Include="ktsu.CodeBlocker" />
+    <PackageReference Include="System.Text.Json" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+    <PackageReference Include="System.Memory" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ktsu.SourceGeneratorToolkit.Test" />
+  </ItemGroup>
+
+</Project>

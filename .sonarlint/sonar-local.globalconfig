@@ -1,0 +1,34 @@
+is_global = true
+
+# Rule severities for the local SonarCloud reproduction (see sonar-local.props).
+# Applied only when building with
+#   dotnet build -p:CustomAfterMicrosoftCommonProps=$PWD/.sonarlint/sonar-local.props
+
+# CI's SonarCloud quality profile reports these, but the SonarAnalyzer NuGet package ships them
+# disabled by default. Raise them so a local run sees what CI sees.
+#
+# S3267 and S2699 are here because CI reported them on PR #87 - S3267 as new issues on
+# DocComment.Validate, S2699 against the older test files. The rest are carried over from the
+# equivalent config in ktsu.Semantics, whose quality profile is the closest available reference.
+dotnet_diagnostic.S107.severity = warning
+dotnet_diagnostic.S1075.severity = warning
+dotnet_diagnostic.S1172.severity = warning
+dotnet_diagnostic.S1192.severity = warning
+dotnet_diagnostic.S1871.severity = warning
+dotnet_diagnostic.S2583.severity = warning
+dotnet_diagnostic.S2699.severity = warning
+dotnet_diagnostic.S3267.severity = warning
+dotnet_diagnostic.S3358.severity = warning
+dotnet_diagnostic.S3458.severity = warning
+dotnet_diagnostic.S3776.severity = warning
+dotnet_diagnostic.S6444.severity = warning
+
+# Enabled by default in the analyzer package. Left enabled here: unlike ktsu.Semantics, this
+# repository has not been shown to have a profile that excludes it, so a false positive is
+# cheaper than a missed finding.
+# dotnet_diagnostic.S1481.severity = none
+
+# KNOWN GAP: SonarCloud reported one new issue on PR #87 that this configuration does not
+# reproduce. The rule behind it is either absent from the analyzer package or shipped disabled
+# and not listed above. If you have dashboard access and can identify it, add it here - the
+# calibration is only as good as the rules it names.

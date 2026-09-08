@@ -1,0 +1,32 @@
+<Project>
+
+  <!--
+    Local SonarCloud reproduction.
+
+    CI analyses this repository with the SonarCloud scanner, which injects the Sonar analyzers
+    into the compilation. A plain `dotnet build` does not run them, so Sonar findings are
+    invisible locally and only surface after a push - and the bot comment links to a dashboard
+    rather than naming them.
+
+    This file wires the same analyzers into a local build. It is NOT imported automatically -
+    point MSBuild at it explicitly:
+
+        dotnet build -p:CustomAfterMicrosoftCommonProps=$PWD/.sonarlint/sonar-local.props
+
+    Note "After", not "Before". Every project here declares its SDK with <Sdk Name="..." />
+    elements rather than the <Project Sdk="..."> attribute, and CustomBeforeMicrosoftCommonProps
+    does not reach that form. CustomAfterMicrosoftCommonProps does, and is still early enough for
+    restore to pick up the PackageReference below.
+
+    sonar-local.globalconfig (next to this file) sets the rule severities so the local warning set
+    approximates CI's.
+
+    Nothing in the repository imports this, so normal builds, the CI pipeline, and packaging are
+    all unaffected.
+  -->
+  <ItemGroup>
+    <PackageReference Include="SonarAnalyzer.CSharp" VersionOverride="10.18.0.131500" PrivateAssets="all" />
+    <EditorConfigFiles Include="$(MSBuildThisFileDirectory)sonar-local.globalconfig" />
+  </ItemGroup>
+
+</Project>

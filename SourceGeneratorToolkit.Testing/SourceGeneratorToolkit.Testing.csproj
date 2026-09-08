@@ -1,0 +1,28 @@
+<Project>
+  <Sdk Name="Microsoft.NET.Sdk" />
+  <Sdk Name="ktsu.Sdk" />
+
+  <PropertyGroup>
+    <!-- Matches the toolkit it tests, so a consumer's test project resolves one framework for
+         both. Nothing here runs inside the compiler. -->
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <TargetFrameworks></TargetFrameworks>
+    <!-- Deliberately NOT set: the harness reads metadata off disk, which RS1035 bans for code that
+         runs in an analyzer host. This assembly does not, which is the reason it is a separate
+         package rather than a suppression inside the analyzer one. -->
+    <EnforceExtendedAnalyzerRules>false</EnforceExtendedAnalyzerRules>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" />
+    <PackageReference Include="Polyfill" PrivateAssets="all" />
+    <PackageReference Include="System.Memory" />
+    <PackageReference Include="System.Threading.Tasks.Extensions" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ktsu.SourceGeneratorToolkit.Test" />
+  </ItemGroup>
+
+</Project>
