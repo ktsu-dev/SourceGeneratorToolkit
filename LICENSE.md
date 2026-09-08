@@ -1,6 +1,6 @@
 MIT License
 
-https://github.com/ktsu-dev/CodeBlocker
+https://github.com/ktsu-dev/SourceGeneratorToolkit
 
 Copyright (c) 2023-2026 ktsu-dev contributors
 
