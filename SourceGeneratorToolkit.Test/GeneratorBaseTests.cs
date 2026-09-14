@@ -111,6 +111,19 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
+	public void AConverterConfigurationFailureIsReportedRatherThanCrashingTheGenerator()
+	{
+		// Two properties claiming one JSON name is neither malformed input nor an unconstructable
+		// type: System.Text.Json cannot build the contract and says so with InvalidOperationException.
+		GeneratorRunResult result = Harness.Run(new ConflictingNamesGenerator());
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+	}
+
+	[TestMethod]
 	public void OneFileFailingOnAnUnsupportedShapeStillLeavesTheOthersProcessed()
 	{
 		// A throw out of Deserialize abandons the whole RegisterSourceOutput callback, so every other

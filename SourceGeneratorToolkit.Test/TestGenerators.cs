@@ -3,6 +3,7 @@
 namespace ktsu.SourceGeneratorToolkit.Test;
 
 using System.Collections.Generic;
+using System.Text.Json.Serialization;
 using ktsu.CodeBlocker;
 using ktsu.CodeBlocker.Templates;
 using Microsoft.CodeAnalysis;
@@ -56,6 +57,20 @@ public sealed class AmbiguousMetadata
 	public string Name { get; }
 
 	public string Kind { get; } = string.Empty;
+}
+
+/// <summary>
+/// A metadata shape whose two properties claim the same JSON name. <c>System.Text.Json</c> cannot
+/// build a contract for it and reports that as <see cref="System.InvalidOperationException"/> — the
+/// third way deserialization fails without throwing <see cref="System.Text.Json.JsonException"/>.
+/// </summary>
+public sealed class ConflictingNamesMetadata
+{
+	[JsonPropertyName("name")]
+	public string Name { get; set; } = string.Empty;
+
+	[JsonPropertyName("name")]
+	public string AlsoName { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -171,6 +186,22 @@ internal sealed class AmbiguousConstructorGenerator() : GeneratorBase<AmbiguousM
 
 	protected override void Generate(SourceProductionContext context, AmbiguousMetadata metadata, CodeBlocker codeBlocker) =>
 		context.AddSource("Ambiguous.g.cs", "// unreachable");
+}
+
+/// <summary>
+/// Deserializes into a type whose property names collide, so the converter-configuration path has a
+/// generator to run.
+/// </summary>
+internal sealed class ConflictingNamesGenerator() : GeneratorBase<ConflictingNamesMetadata>("things.json")
+{
+	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, ConflictingNamesMetadata metadata, CodeBlocker codeBlocker) =>
+		context.AddSource("Conflicting.g.cs", "// unreachable");
 }
 
 /// <summary>
