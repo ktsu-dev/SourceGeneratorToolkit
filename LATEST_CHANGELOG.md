@@ -1,6 +1,7 @@
-## v1.0.3 (patch)
+## v1.0.4 (patch)
 
-Changes since v1.0.2:
+Changes since v1.0.3:
 
-- ci: adopt the consolidated .NET workflow [patch] ([@Claude](https://github.com/Claude))
+- test: cover the InvalidOperationException path in Deserialize [patch] ([@Claude](https://github.com/Claude))
+- fix: report a diagnostic for metadata shapes System.Text.Json cannot construct [patch] ([@Claude](https://github.com/Claude))
 
