@@ -105,22 +105,47 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// A parse failure is always reported. Swallowing it — the tempting shape, because a generator
 	/// has nowhere obvious to throw — means malformed metadata produces no diagnostic at all and the
 	/// generator silently emits something wrong.
+	/// <para>
+	/// Malformed input is not the only way deserialization fails, so catching only
+	/// <see cref="JsonException"/> is not enough. <see cref="JsonSerializer"/> reports a shape it
+	/// cannot construct — an interface or abstract type, or a type with several parameterized
+	/// constructors and no <c>[JsonConstructor]</c> — as <see cref="NotSupportedException"/>, and
+	/// some converter-configuration failures as <see cref="InvalidOperationException"/>. Neither
+	/// derives from <see cref="JsonException"/>, so both used to escape to the Roslyn driver, which
+	/// reports its own generic CS8785 naming neither the file nor the reason and abandons every
+	/// other file in the same invocation. They degrade to the same diagnostic as malformed JSON.
+	/// </para>
 	/// </remarks>
 	public T? Deserialize<T>(SourceProductionContext context, DiagnosticDescriptor parseFailed)
 		where T : class
 	{
+		T? metadata;
 		try
 		{
-			T? metadata = JsonSerializer.Deserialize<T>(Text, DeserializeOptions);
-			if (metadata is not null)
-			{
-				return metadata;
-			}
-
-			context.Report(parseFailed, FileName, "the document deserialized to null");
-			return null;
+			metadata = JsonSerializer.Deserialize<T>(Text, DeserializeOptions);
 		}
 		catch (JsonException ex)
+		{
+			return ParseFailed(ex);
+		}
+		catch (NotSupportedException ex)
+		{
+			return ParseFailed(ex);
+		}
+		catch (InvalidOperationException ex)
+		{
+			return ParseFailed(ex);
+		}
+
+		if (metadata is not null)
+		{
+			return metadata;
+		}
+
+		context.Report(parseFailed, FileName, "the document deserialized to null");
+		return null;
+
+		T? ParseFailed(Exception ex)
 		{
 			context.Report(parseFailed, FileName, ex.Message);
 			return null;

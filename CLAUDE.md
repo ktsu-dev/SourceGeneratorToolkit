@@ -124,7 +124,12 @@ side of it.
   for `things.json`.
 - **A missing or malformed file always reports.** Producing no output and no explanation is
   indistinguishable from a generator that had nothing to emit, and swallowing a `JsonException`
-  means malformed metadata silently generates something wrong.
+  means malformed metadata silently generates something wrong. "Malformed" is wider than bad JSON:
+  `JsonSerializer` reports a shape it cannot construct as `NotSupportedException` and some
+  converter-configuration failures as `InvalidOperationException`, neither of which derives from
+  `JsonException`. `Deserialize<T>` catches all three, because one escaping to the Roslyn driver
+  becomes a generic CS8785 that names neither the file nor the reason — and abandons every other
+  file in the same invocation.
 - **The harness is a separate package, not a separate test project.** A consumer testing their own
   generator needs it, so it ships. It is separate from the analyzer package because it reads files,
   which RS1035 bans for code that runs in an analyzer host — and `EnforceExtendedAnalyzerRules`
@@ -138,9 +143,11 @@ that matters.
 
 - `SourceGeneratorToolkit.Test/Metadata/*.json` are the fixtures. They are copied to the output
   directory and supplied to the driver the way MSBuild's `AdditionalFiles` item group supplies them.
-- `TestGenerators.cs` holds `ThingsGenerator` (single file), `PairGenerator` (two files) and
-  `AbsentFileGenerator` (declares a file nothing supplies), plus the `TST` diagnostic catalogue that
-  stands in for a consumer's own.
+- `TestGenerators.cs` holds `ThingsGenerator` (single file), `PairGenerator` (two files),
+  `AbsentFileGenerator` (declares a file nothing supplies), `UnsupportedShapeGenerator` and
+  `AmbiguousConstructorGenerator` (metadata shapes `System.Text.Json` refuses to construct) and
+  `ResilientPairGenerator` (two files, emitting from whichever parsed), plus the `TST` diagnostic
+  catalogue that stands in for a consumer's own.
 - Use explicit types (no `var`) in test bodies.
 
 ## CI/CD
