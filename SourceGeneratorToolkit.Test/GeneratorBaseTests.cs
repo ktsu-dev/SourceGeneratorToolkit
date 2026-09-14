@@ -84,6 +84,47 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
+	public void AShapeTheSerializerCannotConstructIsReportedRatherThanCrashingTheGenerator()
+	{
+		// An interface-typed model throws NotSupportedException, not JsonException. Uncaught, it
+		// leaves the driver to report its own CS8785, which names neither the file nor the reason.
+		GeneratorRunResult result = Harness.Run(new UnsupportedShapeGenerator());
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		Assert.AreEqual(DiagnosticSeverity.Error, result.Diagnostics[0].Severity);
+		StringAssert.Contains(result.Diagnostics[0].GetMessage(), "things.json");
+	}
+
+	[TestMethod]
+	public void AmbiguousConstructorsAreReportedRatherThanCrashingTheGenerator()
+	{
+		// The other NotSupportedException shape: two parameterized constructors, no [JsonConstructor].
+		GeneratorRunResult result = Harness.Run(new AmbiguousConstructorGenerator());
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+	}
+
+	[TestMethod]
+	public void OneFileFailingOnAnUnsupportedShapeStillLeavesTheOthersProcessed()
+	{
+		// A throw out of Deserialize abandons the whole RegisterSourceOutput callback, so every other
+		// declared file goes unread. A reported diagnostic stops at the file it belongs to.
+		GeneratorRunResult result = Harness.Run(new ResilientPairGenerator());
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		Assert.AreEqual(1, result.GeneratedSources.Length);
+		StringAssert.Contains(result.GeneratedSources[0].SourceText.ToString(), "1 others, things unread");
+	}
+
+	[TestMethod]
 	public void AJsonNullDocumentIsReportedRatherThanTreatedAsEmpty()
 	{
 		GeneratorRunResult result = Harness.Run(
