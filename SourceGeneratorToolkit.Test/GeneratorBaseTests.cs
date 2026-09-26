@@ -206,4 +206,18 @@ public sealed class GeneratorBaseTests
 			Harness.ReusesCachedOutputOnRerun(new ThingsGenerator()),
 			"An IIncrementalGenerator that recomputes everything on every keystroke still passes every output assertion.");
 	}
+
+	[TestMethod]
+	public void TheRerunCheckCatchesAGeneratorThatRecomputesOnEveryEdit()
+	{
+		Assert.IsFalse(
+			Harness.ReusesCachedOutputOnRerun(new CompilationBoundGenerator()),
+			"A generator whose output hangs off the compilation recomputes on every keystroke, and the check must say so.");
+	}
+
+	[TestMethod]
+	public void TheRerunCheckDoesNotPassAGeneratorWithNoOutputSteps()
+	{
+		Assert.IsFalse(Harness.ReusesCachedOutputOnRerun(new SilentGenerator()));
+	}
 }

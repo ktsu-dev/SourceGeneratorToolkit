@@ -353,7 +353,7 @@ argument.
 | `Run(IIncrementalGenerator, IReadOnlyDictionary<string, string>?)` | `GeneratorRunResult` | Runs one generator against every file in the directory. An override replaces a file's contents, or adds a file. |
 | `RunWithOnly(IIncrementalGenerator, params string[])` | `GeneratorRunResult` | Runs one generator against only the named files, so a test can assert what it does when one is absent. |
 | `RunAll(IReadOnlyList<IIncrementalGenerator>, IReadOnlyDictionary<string, string>?)` | `GeneratorDriverRunResult` | Runs several generators and returns the whole driver result. |
-| `ReusesCachedOutputOnRerun(IIncrementalGenerator)` | `bool` | Runs the generator twice over identical metadata and reports whether the second run reused the first run's outputs. |
+| `ReusesCachedOutputOnRerun(IIncrementalGenerator)` | `bool` | Runs the generator twice over identical metadata, the second time against a new but equivalent compilation as an edit would, and reports whether the second run reused the first run's outputs. A generator with no tracked output steps reports `false`. |
 
 ## Contributing
 

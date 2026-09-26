@@ -89,15 +89,28 @@ public sealed class GeneratorHarness(string metadataDirectory)
 		Drive(generators, BuildTexts(overrides));
 
 	/// <summary>
-	/// Runs a generator twice over identical metadata and reports whether the second run reused the
-	/// first run's cached outputs.
+	/// Runs a generator twice over identical metadata, the second time against a new but equivalent
+	/// compilation, and reports whether the second run reused the first run's cached outputs.
 	/// </summary>
 	/// <param name="generator">The generator to run.</param>
-	/// <returns>True when no tracked output step had to be recomputed on the second run.</returns>
+	/// <returns>
+	/// True when the generator tracked at least one output step and none of them had to be
+	/// recomputed on the second run.
+	/// </returns>
 	/// <remarks>
 	/// These are <see cref="IIncrementalGenerator"/>s, and output assertions do not check that they
 	/// behave like one: a generator that recomputes everything on every keystroke still passes every
 	/// output assertion, it just makes the IDE slow.
+	/// <para>
+	/// A keystroke gives the generator a new <see cref="Compilation"/> while the metadata files are
+	/// untouched, so that is what the second run gets. Rerunning against the same compilation instance
+	/// would prove nothing: Roslyn compares incremental inputs by reference, so every step would be
+	/// reported as cached whatever the generator did with the compilation.
+	/// </para>
+	/// <para>
+	/// A generator with no tracked output steps has nothing to prove incremental, so it is reported
+	/// as not reusing its output rather than passing by default.
+	/// </para>
 	/// </remarks>
 	public bool ReusesCachedOutputOnRerun(IIncrementalGenerator generator)
 	{
@@ -112,12 +125,19 @@ public sealed class GeneratorHarness(string metadataDirectory)
 			driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
 
 		driver = driver.RunGenerators(compilation);
-		GeneratorDriverRunResult second = driver.RunGenerators(compilation).GetRunResult();
 
-		return !second.Results[0].TrackedOutputSteps
+		// An empty tree changes nothing the generator could observe semantically, but it is a new
+		// Compilation instance, which is what an edit hands the generator.
+		CSharpCompilation edited = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(string.Empty));
+		GeneratorDriverRunResult second = driver.RunGenerators(edited).GetRunResult();
+
+		List<IncrementalStepRunReason> reasons = [.. second.Results[0].TrackedOutputSteps
 			.SelectMany(pair => pair.Value)
 			.SelectMany(step => step.Outputs)
-			.Any(output => output.Reason is not (IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged));
+			.Select(output => output.Reason)];
+
+		return reasons.Count > 0
+			&& reasons.All(reason => reason is IncrementalStepRunReason.Cached or IncrementalStepRunReason.Unchanged);
 	}
 
 	private List<AdditionalText> BuildTexts(IReadOnlyDictionary<string, string>? overrides)
