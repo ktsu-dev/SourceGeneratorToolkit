@@ -255,3 +255,25 @@ internal sealed class AbsentFileGenerator() : GeneratorBase<ThingsMetadata>("now
 	protected override void Generate(SourceProductionContext context, ThingsMetadata metadata, CodeBlocker codeBlocker) =>
 		context.AddSource("Nowhere.g.cs", "// unreachable");
 }
+
+/// <summary>
+/// Derives its output from the compilation itself, so it recomputes on every edit: the
+/// non-incremental generator the rerun check has to catch.
+/// </summary>
+internal sealed class CompilationBoundGenerator : IIncrementalGenerator
+{
+	public void Initialize(IncrementalGeneratorInitializationContext context) =>
+		context.RegisterSourceOutput(
+			context.CompilationProvider.Select((_, _) => new object()),
+			(productionContext, _) => productionContext.AddSource("x.g.cs", "// x"));
+}
+
+/// <summary>
+/// Registers no output at all, so the rerun check has nothing to prove incremental.
+/// </summary>
+internal sealed class SilentGenerator : IIncrementalGenerator
+{
+	public void Initialize(IncrementalGeneratorInitializationContext context)
+	{
+	}
+}
