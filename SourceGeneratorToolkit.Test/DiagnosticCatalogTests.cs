@@ -67,6 +67,37 @@ public sealed class DiagnosticCatalogTests
 	}
 
 	[TestMethod]
+	public void ReusingANumberAcrossSeveritiesThrows()
+	{
+		DiagnosticCatalog catalog = new("X", "c");
+		catalog.Warning(1, "a", "a");
+
+		ArgumentException exception = Assert.ThrowsExactly<ArgumentException>(() => catalog.Error(1, "b", "b"));
+
+		Assert.AreEqual("number", exception.ParamName);
+		Assert.AreEqual(1, catalog.Descriptors.Count);
+	}
+
+	[TestMethod]
+	public void ReusingANumberWithTheSameSeverityThrows()
+	{
+		DiagnosticCatalog catalog = new("X", "c");
+		catalog.Warning(1, "a", "a");
+
+		Assert.ThrowsExactly<ArgumentException>(() => catalog.Warning(1, "a", "a"));
+	}
+
+	[TestMethod]
+	public void TheSameNumberIsAllowedInSeparateCatalogues()
+	{
+		DiagnosticCatalog first = new("X", "c");
+		DiagnosticCatalog second = new("Y", "c");
+
+		Assert.AreEqual("X001", first.Warning(1, "a", "a").Id);
+		Assert.AreEqual("Y001", second.Warning(1, "a", "a").Id);
+	}
+
+	[TestMethod]
 	public void DescriptorsIsEmptyBeforeAnythingIsAllocated()
 	{
 		DiagnosticCatalog catalog = new("ABC", "Category");
