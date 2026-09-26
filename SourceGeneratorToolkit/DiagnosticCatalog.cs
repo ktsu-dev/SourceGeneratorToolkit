@@ -24,6 +24,7 @@ using Microsoft.CodeAnalysis;
 public sealed class DiagnosticCatalog(string idPrefix, string category)
 {
 	private readonly List<DiagnosticDescriptor> descriptors = [];
+	private readonly HashSet<int> numbers = [];
 
 	/// <summary>Gets the category every descriptor in this catalogue is reported under.</summary>
 	public string Category { get; } = category;
@@ -40,6 +41,9 @@ public sealed class DiagnosticCatalog(string idPrefix, string category)
 	/// <param name="title">The diagnostic title.</param>
 	/// <param name="messageFormat">The message format string.</param>
 	/// <returns>The descriptor, also recorded in <see cref="Descriptors"/>.</returns>
+	/// <exception cref="ArgumentException">
+	/// <paramref name="number"/> has already been allocated from this catalogue.
+	/// </exception>
 	public DiagnosticDescriptor Warning(int number, string title, string messageFormat) =>
 		Add(number, title, messageFormat, DiagnosticSeverity.Warning);
 
@@ -50,13 +54,25 @@ public sealed class DiagnosticCatalog(string idPrefix, string category)
 	/// <param name="title">The diagnostic title.</param>
 	/// <param name="messageFormat">The message format string.</param>
 	/// <returns>The descriptor, also recorded in <see cref="Descriptors"/>.</returns>
+	/// <exception cref="ArgumentException">
+	/// <paramref name="number"/> has already been allocated from this catalogue.
+	/// </exception>
 	public DiagnosticDescriptor Error(int number, string title, string messageFormat) =>
 		Add(number, title, messageFormat, DiagnosticSeverity.Error);
 
 	private DiagnosticDescriptor Add(int number, string title, string messageFormat, DiagnosticSeverity severity)
 	{
+		string id = idPrefix + number.ToString("D3", CultureInfo.InvariantCulture);
+
+		// Two descriptors under one identifier would share every .editorconfig severity override and
+		// #pragma suppression meant for either, so a reused number is a mistake to catch here.
+		if (!numbers.Add(number))
+		{
+			throw new ArgumentException($"Diagnostic number {number} is already allocated as {id}.", nameof(number));
+		}
+
 		DiagnosticDescriptor descriptor = new(
-			id: idPrefix + number.ToString("D3", CultureInfo.InvariantCulture),
+			id: id,
 			title: title,
 			messageFormat: messageFormat,
 			category: Category,
