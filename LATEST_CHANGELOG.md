@@ -1,6 +1,4 @@
-## v1.2.1 (patch)
+## v1.2.1
 
-Changes since v1.2.0:
-
-- fix: report an empty metadata file as unparseable, not missing [patch] ([@Claude](https://github.com/Claude))
+No significant changes detected since v1.2.1.
 
