@@ -150,14 +150,16 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
-	public void AnEmptyMetadataFileCountsAsMissing()
+	[DataRow("")]
+	[DataRow("  \n\t")]
+	public void AnEmptyMetadataFileIsReportedAsUnparseableNotMissing(string contents)
 	{
 		GeneratorRunResult result = Harness.Run(
 			new ThingsGenerator(),
-			new Dictionary<string, string> { ["things.json"] = "" });
+			new Dictionary<string, string> { ["things.json"] = contents });
 
 		Assert.AreEqual(1, result.Diagnostics.Length);
-		Assert.AreEqual(TestDiagnostics.MetadataFileMissing.Id, result.Diagnostics[0].Id);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id, result.Diagnostics[0].GetMessage());
 	}
 
 	[TestMethod]

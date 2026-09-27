@@ -62,15 +62,19 @@ public abstract class GeneratorBase : IIncrementalGenerator
 				SourceText? sourceText = file.GetText(cancellationToken);
 				return new MetadataFile(NameOf(file.Path), sourceText?.ToString() ?? string.Empty, sourceText, file.Path);
 			})
-			.Where(file => file.Text.Length > 0)
 			.Collect();
 
 		context.RegisterSourceOutput(metadataFiles, (productionContext, files) =>
 		{
-			// A duplicate name means the same metadata reached the compilation twice; the first wins.
+			// A duplicate name means the same metadata reached the compilation twice; the first with
+			// content wins. An empty file is still present, so it is handed on and fails to parse
+			// rather than being reported as missing.
 			Dictionary<string, MetadataFile> byName = files
 				.GroupBy(file => file.FileName, StringComparer.Ordinal)
-				.ToDictionary(group => group.Key, group => group.First(), StringComparer.Ordinal);
+				.ToDictionary(
+					group => group.Key,
+					group => group.FirstOrDefault(file => file.Text.Length > 0) ?? group.First(),
+					StringComparer.Ordinal);
 
 			// A missing file must say so. Producing no output and no explanation is indistinguishable
 			// from a generator that simply had nothing to emit.
