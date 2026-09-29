@@ -1,6 +1,6 @@
-## v1.2.2-pre.1 (prerelease)
+## v1.2.2 (patch)
 
 Changes since v1.2.1:
 
-- Bump Polyfill from 11.4.0 to 11.4.1 ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- Move CI onto the shared ci-shared.yml pipeline ([@Claude](https://github.com/Claude))
 
