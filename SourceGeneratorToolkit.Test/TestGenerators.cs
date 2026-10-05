@@ -260,6 +260,37 @@ internal sealed class ResilientPairGenerator : GeneratorBase
 }
 
 /// <summary>
+/// Reads both metadata files, the first into a model whose constructor throws on a missing
+/// property, and emits from whichever one deserialized.
+/// </summary>
+internal sealed class GuardedPairGenerator : GeneratorBase
+{
+	protected override IReadOnlyList<string> MetadataFileNames => ["things.json", "others.json"];
+
+	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, MetadataSet metadata)
+	{
+		GuardedThingsMetadata? things = metadata["things.json"]?.Deserialize<GuardedThingsMetadata>(context, MetadataParseFailed);
+		OthersMetadata? others = metadata["others.json"]?.Deserialize<OthersMetadata>(context, MetadataParseFailed);
+
+		if (others is null)
+		{
+			return;
+		}
+
+		using CodeBlocker codeBlocker = CreateCodeBlocker();
+		WriteFileHeader(codeBlocker, TestDiagnostics.Copyright);
+		codeBlocker.WriteLine($"// {others.Others.Count} others, things {(things is null ? "unread" : "read")}");
+		context.AddSource("Guarded.g.cs", codeBlocker.ToString());
+	}
+}
+
+/// <summary>
 /// Declares a file nothing supplies, so the missing-file path has a generator to run.
 /// </summary>
 internal sealed class AbsentFileGenerator() : GeneratorBase<ThingsMetadata>("nowhere.json")
@@ -293,36 +324,5 @@ internal sealed class SilentGenerator : IIncrementalGenerator
 {
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
-	}
-}
-
-/// <summary>
-/// Reads both metadata files, the first into a model whose constructor throws on a missing
-/// property, and emits from whichever one deserialized.
-/// </summary>
-internal sealed class GuardedPairGenerator : GeneratorBase
-{
-	protected override IReadOnlyList<string> MetadataFileNames => ["things.json", "others.json"];
-
-	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
-
-	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
-
-	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
-
-	protected override void Generate(SourceProductionContext context, MetadataSet metadata)
-	{
-		GuardedThingsMetadata? things = metadata["things.json"]?.Deserialize<GuardedThingsMetadata>(context, MetadataParseFailed);
-		OthersMetadata? others = metadata["others.json"]?.Deserialize<OthersMetadata>(context, MetadataParseFailed);
-
-		if (others is null)
-		{
-			return;
-		}
-
-		using CodeBlocker codeBlocker = CreateCodeBlocker();
-		WriteFileHeader(codeBlocker, TestDiagnostics.Copyright);
-		codeBlocker.WriteLine($"// {others.Others.Count} others, things {(things is null ? "unread" : "read")}");
-		context.AddSource("Guarded.g.cs", codeBlocker.ToString());
 	}
 }
