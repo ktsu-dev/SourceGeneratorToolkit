@@ -108,6 +108,12 @@ public sealed class GeneratorHarness(string metadataDirectory)
 	/// reported as cached whatever the generator did with the compilation.
 	/// </para>
 	/// <para>
+	/// A third run then swaps every metadata file for a new <see cref="AdditionalText"/> with the same
+	/// contents, as the IDE does after an undo or a save with no change. Roslyn compares step outputs
+	/// with their default equality, so a model projected from a metadata file without value equality
+	/// recomputes there even though nothing changed.
+	/// </para>
+	/// <para>
 	/// A generator with no tracked output steps has nothing to prove incremental, so it is reported
 	/// as not reusing its output rather than passing by default.
 	/// </para>
@@ -129,9 +135,22 @@ public sealed class GeneratorHarness(string metadataDirectory)
 		// An empty tree changes nothing the generator could observe semantically, but it is a new
 		// Compilation instance, which is what an edit hands the generator.
 		CSharpCompilation edited = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText(string.Empty));
-		GeneratorDriverRunResult second = driver.RunGenerators(edited).GetRunResult();
+		driver = driver.RunGenerators(edited);
+		GeneratorDriverRunResult second = driver.GetRunResult();
 
-		List<IncrementalStepRunReason> reasons = [.. second.Results[0].TrackedOutputSteps
+		// The IDE also hands the generator a new AdditionalText with unchanged contents, after an
+		// edit that was undone or a save with no change. Whatever the generator projects from it has
+		// to compare equal by value for the step to stay cached.
+		foreach (AdditionalText text in texts)
+		{
+			string contents = text.GetText()?.ToString() ?? string.Empty;
+			driver = driver.ReplaceAdditionalText(text, new InMemoryAdditionalText(text.Path, contents));
+		}
+
+		GeneratorDriverRunResult third = driver.RunGenerators(edited).GetRunResult();
+
+		List<IncrementalStepRunReason> reasons = [.. new[] { second, third }
+			.SelectMany(run => run.Results[0].TrackedOutputSteps)
 			.SelectMany(pair => pair.Value)
 			.SelectMany(step => step.Outputs)
 			.Select(output => output.Reason)];

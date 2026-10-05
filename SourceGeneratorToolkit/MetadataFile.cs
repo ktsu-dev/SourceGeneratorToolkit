@@ -15,7 +15,12 @@ using Microsoft.CodeAnalysis.Text;
 /// <param name="text">The file's contents.</param>
 /// <param name="sourceText">The underlying <see cref="SourceText"/>, used to build locations.</param>
 /// <param name="path">The file's full path, used to build locations.</param>
-public sealed class MetadataFile(string fileName, string text, SourceText? sourceText, string path)
+/// <remarks>
+/// Compared by value — name, path and text — because Roslyn compares incremental step outputs with
+/// their default equality. By reference, every new <see cref="AdditionalText"/> the IDE creates for
+/// unchanged contents (an undone edit, a save with no change) would re-run the whole generator.
+/// </remarks>
+public sealed class MetadataFile(string fileName, string text, SourceText? sourceText, string path) : IEquatable<MetadataFile>
 {
 	/// <summary>
 	/// Allocated once rather than per call: constructing <see cref="JsonSerializerOptions"/> inside
@@ -27,11 +32,38 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 		PropertyNameCaseInsensitive = true
 	};
 
+	/// <summary>
+	/// The full path, held as a field rather than read from the constructor parameter so
+	/// <see cref="Equals(MetadataFile)"/> can compare it on another instance.
+	/// </summary>
+	private readonly string filePath = path;
+
 	/// <summary>Gets the file's name, without its directory.</summary>
 	public string FileName { get; } = fileName;
 
 	/// <summary>Gets the file's contents.</summary>
 	public string Text { get; } = text;
+
+	/// <inheritdoc/>
+	public bool Equals(MetadataFile? other) =>
+		other is not null
+		&& string.Equals(FileName, other.FileName, StringComparison.Ordinal)
+		&& string.Equals(filePath, other.filePath, StringComparison.Ordinal)
+		&& string.Equals(Text, other.Text, StringComparison.Ordinal);
+
+	/// <inheritdoc/>
+	public override bool Equals(object? obj) => Equals(obj as MetadataFile);
+
+	/// <inheritdoc/>
+	public override int GetHashCode()
+	{
+		unchecked
+		{
+			int hash = StringComparer.Ordinal.GetHashCode(FileName);
+			hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(filePath);
+			return (hash * 397) ^ StringComparer.Ordinal.GetHashCode(Text);
+		}
+	}
 
 	/// <summary>
 	/// Finds the first occurrence of <paramref name="needle"/> in the file and returns a location
@@ -155,7 +187,7 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	private Location LocationAt(int index, int length)
 	{
 		TextSpan span = new(index, length);
-		return Location.Create(path, span, sourceText!.Lines.GetLinePositionSpan(span));
+		return Location.Create(filePath, span, sourceText!.Lines.GetLinePositionSpan(span));
 	}
 }
 
