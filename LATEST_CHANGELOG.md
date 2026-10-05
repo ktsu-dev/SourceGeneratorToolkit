@@ -1,6 +1,6 @@
-## v1.2.3 (patch)
+## v1.2.4-pre.1 (prerelease)
 
-Changes since v1.2.2:
+Changes since v1.2.3:
 
-- fix: comment every line of a multi-line copyright in the file header [patch] ([@matt-edmondson](https://github.com/matt-edmondson))
+- Bump Polyfill from 11.4.1 to 11.4.3 ([@dependabot[bot]](https://github.com/dependabot[bot]))
 
