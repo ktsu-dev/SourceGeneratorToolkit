@@ -138,6 +138,23 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
+	public void AModelConstructorThatThrowsIsReportedAndTheOtherFilesStillProcessed()
+	{
+		// System.Text.Json lets the model's own constructor exceptions through unwrapped, so a guard
+		// clause meeting a missing property throws ArgumentNullException rather than JsonException.
+		GeneratorRunResult result = Harness.Run(
+			new GuardedPairGenerator(),
+			new Dictionary<string, string> { ["things.json"] = """{"things":[{"kind":"x"}]}""" });
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		StringAssert.Contains(result.Diagnostics[0].GetMessage(), "things.json");
+		Assert.AreEqual(1, result.GeneratedSources.Length);
+		StringAssert.Contains(result.GeneratedSources[0].SourceText.ToString(), "1 others, things unread");
+	}
+
+	[TestMethod]
 	public void AJsonNullDocumentIsReportedRatherThanTreatedAsEmpty()
 	{
 		GeneratorRunResult result = Harness.Run(
