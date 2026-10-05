@@ -277,3 +277,17 @@ internal sealed class SilentGenerator : IIncrementalGenerator
 	{
 	}
 }
+
+/// <summary>
+/// Exposes the protected header writer, so a header can be checked without a whole generator run.
+/// </summary>
+internal abstract class HeaderProbe : GeneratorBase
+{
+	internal static string Write(string? copyright)
+	{
+		using CodeBlocker codeBlocker = CreateCodeBlocker();
+		WriteFileHeader(codeBlocker, copyright);
+		codeBlocker.WriteLine("namespace Generated { }");
+		return codeBlocker.ToString();
+	}
+}
