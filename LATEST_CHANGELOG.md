@@ -1,6 +1,6 @@
-## v1.2.5 (patch)
+## v1.2.6 (patch)
 
-Changes since v1.2.4:
+Changes since v1.2.5:
 
-- fix: give MetadataFile value equality so unchanged metadata stays cached [patch] ([@matt-edmondson](https://github.com/matt-edmondson))
+- Opt the analyzer assembly out of KTSU0008 ([@Claude](https://github.com/Claude))
 
