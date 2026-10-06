@@ -1,6 +1,7 @@
-## v1.2.4-pre.1 (prerelease)
+## v1.2.4 (patch)
 
 Changes since v1.2.3:
 
-- Bump Polyfill from 11.4.1 to 11.4.3 ([@dependabot[bot]](https://github.com/dependabot[bot]))
+- Move GuardedPairGenerator beside ResilientPairGenerator ([@matt-edmondson](https://github.com/matt-edmondson))
+- fix: report a model constructor's ArgumentException as a parse failure [patch] ([@matt-edmondson](https://github.com/matt-edmondson))
 
