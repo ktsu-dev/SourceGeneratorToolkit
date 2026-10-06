@@ -41,6 +41,24 @@ public interface IThingsMetadata
 }
 
 /// <summary>
+/// A thing whose constructor guards its argument, the way an ordinary domain model does.
+/// <c>System.Text.Json</c> does not wrap what the constructor throws, so a missing property surfaces
+/// as the guard's own <see cref="System.ArgumentNullException"/>.
+/// </summary>
+public sealed record GuardedThing
+{
+	public GuardedThing(string name) => Name = name ?? throw new System.ArgumentNullException(nameof(name));
+
+	public string Name { get; }
+}
+
+/// <summary>A metadata shape whose entries are <see cref="GuardedThing"/>.</summary>
+public sealed class GuardedThingsMetadata
+{
+	public List<GuardedThing> Things { get; set; } = [];
+}
+
+/// <summary>
 /// The other shape <c>System.Text.Json</c> refuses the same way: two public parameterized
 /// constructors and no <c>[JsonConstructor]</c> to pick between them.
 /// </summary>
@@ -238,6 +256,37 @@ internal sealed class ResilientPairGenerator : GeneratorBase
 		WriteFileHeader(codeBlocker, TestDiagnostics.Copyright);
 		codeBlocker.WriteLine($"// {others.Others.Count} others, things {(things is null ? "unread" : "read")}");
 		context.AddSource("Others.g.cs", codeBlocker.ToString());
+	}
+}
+
+/// <summary>
+/// Reads both metadata files, the first into a model whose constructor throws on a missing
+/// property, and emits from whichever one deserialized.
+/// </summary>
+internal sealed class GuardedPairGenerator : GeneratorBase
+{
+	protected override IReadOnlyList<string> MetadataFileNames => ["things.json", "others.json"];
+
+	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, MetadataSet metadata)
+	{
+		GuardedThingsMetadata? things = metadata["things.json"]?.Deserialize<GuardedThingsMetadata>(context, MetadataParseFailed);
+		OthersMetadata? others = metadata["others.json"]?.Deserialize<OthersMetadata>(context, MetadataParseFailed);
+
+		if (others is null)
+		{
+			return;
+		}
+
+		using CodeBlocker codeBlocker = CreateCodeBlocker();
+		WriteFileHeader(codeBlocker, TestDiagnostics.Copyright);
+		codeBlocker.WriteLine($"// {others.Others.Count} others, things {(things is null ? "unread" : "read")}");
+		context.AddSource("Guarded.g.cs", codeBlocker.ToString());
 	}
 }
 

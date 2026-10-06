@@ -115,6 +115,12 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// reports its own generic CS8785 naming neither the file nor the reason and abandons every
 	/// other file in the same invocation. They degrade to the same diagnostic as malformed JSON.
 	/// </para>
+	/// <para>
+	/// <see cref="JsonSerializer"/> also lets the model's own constructor exceptions through
+	/// unwrapped, so an ordinary guard clause meeting a missing property throws
+	/// <see cref="ArgumentNullException"/>. <see cref="ArgumentException"/> and its derivations are
+	/// reported the same way.
+	/// </para>
 	/// </remarks>
 	public T? Deserialize<T>(SourceProductionContext context, DiagnosticDescriptor parseFailed)
 		where T : class
@@ -133,6 +139,10 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return ParseFailed(ex);
 		}
 		catch (InvalidOperationException ex)
+		{
+			return ParseFailed(ex);
+		}
+		catch (ArgumentException ex)
 		{
 			return ParseFailed(ex);
 		}
