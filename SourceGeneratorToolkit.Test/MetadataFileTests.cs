@@ -23,6 +23,30 @@ public sealed class MetadataFileTests
 		new("things.json", text, withSourceText ? SourceText.From(text) : null, "/repo/Metadata/things.json");
 
 	[TestMethod]
+	public void TwoFilesWithTheSameNamePathAndTextAreEqual()
+	{
+		// Roslyn compares incremental step outputs with default equality, so without value equality a
+		// fresh AdditionalText with identical contents re-runs the whole generator.
+		MetadataFile first = Create();
+		MetadataFile second = Create();
+
+		Assert.IsTrue(first.Equals(second));
+		Assert.IsTrue(Equals(first, second));
+		Assert.AreEqual(first.GetHashCode(), second.GetHashCode());
+	}
+
+	[TestMethod]
+	public void FilesDifferingInTextNameOrPathAreNotEqual()
+	{
+		MetadataFile file = Create();
+
+		Assert.IsFalse(file.Equals(Create(Json + " ")));
+		Assert.IsFalse(file.Equals(new MetadataFile("others.json", Json, SourceText.From(Json), "/repo/Metadata/things.json")));
+		Assert.IsFalse(file.Equals(new MetadataFile("things.json", Json, SourceText.From(Json), "/elsewhere/things.json")));
+		Assert.IsFalse(file.Equals(null));
+	}
+
+	[TestMethod]
 	public void FindLocationPointsAtTheFirstOccurrence()
 	{
 		MetadataFile file = Create();
