@@ -12,6 +12,13 @@
          It is left on: everything in this project runs inside the compiler. Test-harness code,
          which legitimately reads files, lives in SourceGeneratorToolkit.Testing instead. -->
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <!-- KTSU0008 reads netstandard2.0's package conflict overrides as a shared framework and asks
+         for System.Collections.Immutable to be pinned to 1.4.0. Neither half applies here: this
+         assembly runs inside the compiler, which supplies System.Collections.Immutable and Roslyn
+         itself at its own version, which is why both references are private. And the pin is not
+         possible, because Microsoft.CodeAnalysis.Common requires a far newer
+         System.Collections.Immutable, so 1.4.0 would be a downgrade NuGet refuses (NU1605). -->
+    <KtsuEnableFrameworkOverrideAnalysis>false</KtsuEnableFrameworkOverrideAnalysis>
   </PropertyGroup>
 
   <ItemGroup>
