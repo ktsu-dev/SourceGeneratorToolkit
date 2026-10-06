@@ -1,7 +1,6 @@
-## v1.2.4 (patch)
+## v1.2.5 (patch)
 
-Changes since v1.2.3:
+Changes since v1.2.4:
 
-- Move GuardedPairGenerator beside ResilientPairGenerator ([@matt-edmondson](https://github.com/matt-edmondson))
-- fix: report a model constructor's ArgumentException as a parse failure [patch] ([@matt-edmondson](https://github.com/matt-edmondson))
+- fix: give MetadataFile value equality so unchanged metadata stays cached [patch] ([@matt-edmondson](https://github.com/matt-edmondson))
 
