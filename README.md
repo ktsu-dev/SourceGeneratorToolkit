@@ -75,6 +75,16 @@ dotnet add package ktsu.SourceGeneratorToolkit.Testing
 `ktsu.SourceGeneratorToolkit` goes in the generator project; `ktsu.SourceGeneratorToolkit.Testing`
 goes in the project that tests it.
 
+The Roslyn compatibility floor is **4.8.0**. A consuming generator must reference Roslyn 4.8.0 or
+later, and its compiler host must be at least as new as the Roslyn version the generator references.
+`PrivateAssets="all"` keeps Roslyn out of the toolkit's NuGet dependencies; the compiled DLL still
+records its Roslyn assembly reference. The testing package exposes Roslyn dependencies at the same
+floor.
+
+The test project fixes both Roslyn references at 4.8.0 and checks consumer compilation and
+`CSharpGeneratorDriver` behavior on `net10.0`. SDK-version and packaged-analyzer loading checks are
+separate from this regression boundary.
+
 ## Usage Examples
 
 ### Basic Example
