@@ -21,7 +21,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
+    <!-- Exercise the consumer and driver at a fixed floor, independently of the shipping
+         projects' central versions, so an accidental increase fails this boundary. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.8.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Common" VersionOverride="4.8.0" />
     <PackageReference Include="ktsu.CodeBlocker" />
   </ItemGroup>
 

@@ -6,8 +6,10 @@
     <!-- Test packages: CodeCoverage and TrxReport versions are supplied by MSTest.Sdk;
          do not pin them here or CPM reports duplicate PackageVersion items (NU1506). -->
     <PackageVersion Include="ktsu.CodeBlocker" Version="2.3.2" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.9.0" />
-    <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="5.9.0" />
+    <!-- Keep runtime Roslyn references at the tested compatibility floor. Raising them also
+         raises the assembly version required by consuming generators and compiler hosts. -->
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.Common" Version="4.8.0" />
     <PackageVersion Include="System.Collections.Immutable" Version="10.0.12" />
     <PackageVersion Include="Microsoft.CodeAnalysis.Analyzers" Version="5.9.0" />
     <PackageVersion Include="Polyfill" Version="11.4.3" />
