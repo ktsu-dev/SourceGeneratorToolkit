@@ -79,9 +79,17 @@ The solution uses:
   consumers: they write templates against it.
 - **System.Text.Json** — metadata deserialization. Flows to consumers: their metadata models are its
   DTOs.
-- **Microsoft.CodeAnalysis.CSharp / .Common / .Analyzers**, **System.Collections.Immutable** —
-  `PrivateAssets="all"`. The analyzer host supplies Roslyn, and a consuming generator references it
-  at whatever version it builds against, so it must not flow as a package dependency.
+- **Microsoft.CodeAnalysis.CSharp / .Common** — pinned to the tested **4.8.0 compatibility floor**
+  so consumers and compiler hosts do not have to use Roslyn 5.9. `PrivateAssets="all"` in the
+  compiler package hides the NuGet dependency, but does not remove the compiled assembly reference.
+  Consumers must reference at least this version; their host must support the version they choose.
+  The testing package exposes both references at the same floor. The test project fixes both with
+  `VersionOverride` independently of the central pins to guard consumer compilation and driver
+  behavior. Dependabot ignores major/minor updates for these two packages so raising the floor
+  is deliberate; patch updates remain enabled.
+- **Microsoft.CodeAnalysis.Analyzers**, **System.Collections.Immutable** — `PrivateAssets="all"`
+  in the compiler package. Build-time analyzer updates stay independent of the runtime Roslyn
+  floor; the compiler host supplies Immutable.
 - **Polyfill** — `PrivateAssets="all"`. Source-only; supplies `Ensure` and the range/index types on
   `netstandard2.0`.
 

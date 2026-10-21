@@ -5,6 +5,12 @@ updates:
   schedule:
     interval: "daily"
   ignore:
+    # Major/minor increases change the runtime and test compatibility floor; keep patch updates.
+    # Build-time Microsoft.CodeAnalysis.Analyzers stays independent.
+    - dependency-name: "Microsoft.CodeAnalysis.CSharp"
+      update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    - dependency-name: "Microsoft.CodeAnalysis.Common"
+      update-types: ["version-update:semver-major", "version-update:semver-minor"]
     # SixLabors.ImageSharp 4.0 enforces a build-time license key, which breaks
     # local builds and forks that lack the SIXLABORS_LICENSE_KEY secret. Stay on
     # 3.x (the last license-key-free line); still allow 3.1.x patch/minor bumps.
