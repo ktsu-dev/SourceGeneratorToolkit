@@ -1,6 +1,6 @@
-## v1.2.7 (patch)
+## v1.2.8-pre.1 (prerelease)
 
-Changes since v1.2.6:
+Changes since v1.2.7:
 
-- Report malformed metadata JSON at the line it breaks on [patch] (Claude)
+- Bump the system group with 2 updates (dependabot[bot])
 
