@@ -1,6 +1,8 @@
-## v1.2.8-pre.2 (prerelease)
+## v1.2.8 (patch)
 
-Changes since v1.2.8-pre.1:
+Changes since v1.2.7:
 
-- Bump MSTest.Sdk from 4.5.1 to 4.5.2 (dependabot[bot])
+- Say what a null copyright leaves out of the header (Claude)
+- Enable nullable in every generated file's header [patch] (Claude)
+- Split a copyright at NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR too [patch] (Claude)
 
