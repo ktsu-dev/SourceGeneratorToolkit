@@ -289,6 +289,9 @@ public sealed class GeneratorBaseTests
 	[DataRow("\n")]
 	[DataRow("\r\n")]
 	[DataRow("\r")]
+	[DataRow("\u0085")]
+	[DataRow("\u2028")]
+	[DataRow("\u2029")]
 	public void AMultiLineCopyrightIsCommentedOnEveryLine(string lineBreak)
 	{
 		string source = HeaderProbe.Write($"Copyright (c) Example.{lineBreak}{lineBreak}All rights reserved.");

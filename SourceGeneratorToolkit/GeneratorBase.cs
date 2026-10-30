@@ -110,9 +110,10 @@ public abstract class GeneratorBase : IIncrementalGenerator
 		CodeBlocker.Create(CodeBlocker.DefaultIndentString, NewLines.Lf);
 
 	/// <summary>
-	/// The line breaks a copyright is split on, longest first so CRLF is one break rather than two.
+	/// Every line terminator the C# compiler recognises, which a copyright is split on so no text escapes its
+	/// comment. Longest first, so CRLF is one break rather than two.
 	/// </summary>
-	private static readonly string[] CopyrightLineBreaks = ["\r\n", "\n", "\r"];
+	private static readonly string[] CopyrightLineBreaks = ["\r\n", "\n", "\r", "\u0085", "\u2028", "\u2029"];
 
 	/// <summary>
 	/// Writes the header every generated file starts with.
@@ -121,7 +122,8 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// <param name="copyright">
 	/// The copyright written above the generated-file marker, without its <c>//</c> prefix.
 	/// <see langword="null"/> or empty writes only the marker. A multi-line copyright is commented
-	/// line by line, whichever line break it uses, so a consumer's multi-line file header template
+	/// line by line at every line terminator the C# compiler recognises (CR, LF, CRLF, NEL,
+	/// LINE SEPARATOR and PARAGRAPH SEPARATOR), so a consumer's multi-line file header template
 	/// still compiles.
 	/// </param>
 	/// <remarks>
