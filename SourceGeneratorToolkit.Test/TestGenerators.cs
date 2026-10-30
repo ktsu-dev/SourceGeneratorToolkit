@@ -340,3 +340,32 @@ internal abstract class HeaderProbe : GeneratorBase
 		return codeBlocker.ToString();
 	}
 }
+
+/// <summary>
+/// Exposes the protected whole-file writer, so its output can be compiled alongside a consumer.
+/// </summary>
+internal abstract class SourceFileProbe : GeneratorBase
+{
+	/// <summary>
+	/// Writes <c>Generated.Thing</c> with a <c>string?</c> field and a <c>string</c> field.
+	/// </summary>
+	internal static string WriteThingWithNullableAndNonNullableMembers()
+	{
+		SourceFileTemplate file = new() { Namespace = "Generated" };
+		file.Classes.Add(new ClassTemplate
+		{
+			Name = "Thing",
+			Kind = ktsu.CodeBlocker.Templates.TypeKind.Class,
+			Keywords = { CSharpKeywords.Public },
+			Members =
+			{
+				new FieldTemplate { Name = "Description", Type = "string?", Keywords = { CSharpKeywords.Public } },
+				new FieldTemplate { Name = "Name", Type = "string", DefaultValue = "\"\"", Keywords = { CSharpKeywords.Public } },
+			},
+		});
+
+		using CodeBlocker codeBlocker = CreateCodeBlocker();
+		WriteSourceFile(codeBlocker, file, TestDiagnostics.Copyright);
+		return codeBlocker.ToString();
+	}
+}
