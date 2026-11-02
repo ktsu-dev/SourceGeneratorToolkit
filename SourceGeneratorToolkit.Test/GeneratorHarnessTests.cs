@@ -13,12 +13,14 @@ using ktsu.SourceGeneratorToolkit.Testing;
 [TestClass]
 public sealed class GeneratorHarnessTests
 {
-	private static GeneratorHarness Harness => new(Path.Combine(AppContext.BaseDirectory, "Metadata"));
+	private static string MetadataDirectory => Path.Join(AppContext.BaseDirectory, "Metadata");
+
+	private static GeneratorHarness Harness => new(MetadataDirectory);
 
 	[TestMethod]
 	public void AHeaderForACSharp73ConsumerParsesWithoutCS8370()
 	{
-		GeneratorHarness harness = new(Path.Combine(AppContext.BaseDirectory, "Metadata")) { LanguageVersion = LanguageVersion.CSharp7_3 };
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = LanguageVersion.CSharp7_3 };
 
 		GeneratorRunResult result = harness.Run(new PairGenerator());
 
@@ -33,7 +35,7 @@ public sealed class GeneratorHarnessTests
 	[DataRow(LanguageVersion.Latest)]
 	public void AHeaderForACSharp8OrLaterConsumerEnablesNullable(LanguageVersion languageVersion)
 	{
-		GeneratorHarness harness = new(Path.Combine(AppContext.BaseDirectory, "Metadata")) { LanguageVersion = languageVersion };
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = languageVersion };
 
 		GeneratorRunResult result = harness.Run(new PairGenerator());
 
