@@ -89,19 +89,33 @@ public abstract class GeneratorBase : IIncrementalGenerator
 				productionContext.Report(MetadataFileMissing, name);
 			}
 
-			// Held for the duration of Generate so the static WriteFileHeader, which has no access to
-			// the compilation, can still match its output to the consumer's language version.
-			LanguageVersion? previous = consumerLanguageVersion;
-			consumerLanguageVersion = (input.Options as CSharpParseOptions)?.LanguageVersion;
-			try
-			{
-				Generate(productionContext, new MetadataSet(byName));
-			}
-			finally
-			{
-				consumerLanguageVersion = previous;
-			}
+			RunForLanguageVersion(
+				(input.Options as CSharpParseOptions)?.LanguageVersion,
+				() => Generate(productionContext, new MetadataSet(byName)));
 		});
+	}
+
+	/// <summary>
+	/// Runs an action with the consumer's language version available to <see cref="WriteFileHeader(CodeBlocker, string?)"/>.
+	/// </summary>
+	/// <param name="languageVersion">The consuming compilation's language version, if known.</param>
+	/// <param name="action">The action to run.</param>
+	/// <remarks>
+	/// Held for the duration of the action so the static header writer, which has no access to the
+	/// compilation, can still match its output to the consumer's language version.
+	/// </remarks>
+	private static void RunForLanguageVersion(LanguageVersion? languageVersion, Action action)
+	{
+		LanguageVersion? previous = consumerLanguageVersion;
+		consumerLanguageVersion = languageVersion;
+		try
+		{
+			action();
+		}
+		finally
+		{
+			consumerLanguageVersion = previous;
+		}
 	}
 
 	/// <summary>
