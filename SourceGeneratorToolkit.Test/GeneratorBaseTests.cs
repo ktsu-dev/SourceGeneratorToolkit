@@ -4,10 +4,12 @@ namespace ktsu.SourceGeneratorToolkit.Test;
 
 using System;
 using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.IO;
 using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.Text;
 using ktsu.SourceGeneratorToolkit.Testing;
 
 [TestClass]
@@ -71,6 +73,71 @@ public sealed class GeneratorBaseTests
 		Assert.AreEqual(1, result.Diagnostics.Length);
 		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
 		Assert.AreEqual(DiagnosticSeverity.Error, result.Diagnostics[0].Severity);
+	}
+
+	[TestMethod]
+	[DataRow("\n", DisplayName = "LF")]
+	[DataRow("\r\n", DisplayName = "CRLF")]
+	[DataRow("\r", DisplayName = "CR")]
+	public void AMalformedMetadataFileIsReportedAtTheBadLine(string newLine)
+	{
+		string json = string.Join(newLine, "{", "  \"things\":", "    [1,,2]", "}");
+
+		Diagnostic diagnostic = ParseFailure(json);
+
+		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
+		Assert.AreEqual(LocationKind.ExternalFile, diagnostic.Location.Kind);
+		Assert.AreEqual("things.json", Path.GetFileName(span.Path));
+		Assert.AreEqual(2, span.StartLinePosition.Line);
+
+		// System.Text.Json reports the position it had reached, which is the first comma of the pair.
+		Assert.AreEqual("    [1,,2]".IndexOf(",,", StringComparison.Ordinal), span.StartLinePosition.Character);
+	}
+
+	[TestMethod]
+	public void AParseFailureAfterMultiByteCharactersIsLocatedByCharacterNotByte()
+	{
+		// "é" is one character and two UTF-8 bytes, and "😀" is two characters (a surrogate pair) and
+		// four bytes. The ASCII twin has the same characters in the same places, so the two failures
+		// must land on the same character even though the byte positions differ.
+		LinePosition multiByte = ParseFailure("{\n  \"things\": [\"é😀\",,1]\n}").Location.GetLineSpan().StartLinePosition;
+		LinePosition ascii = ParseFailure("{\n  \"things\": [\"abc\",,1]\n}").Location.GetLineSpan().StartLinePosition;
+
+		Assert.AreEqual(1, multiByte.Line);
+		Assert.AreEqual(ascii, multiByte);
+	}
+
+	[TestMethod]
+	public void AParseFailureAtTheEndOfTheFileIsLocatedAtTheEnd()
+	{
+		string json = "{\n  \"things\": [";
+
+		Diagnostic diagnostic = ParseFailure(json);
+
+		FileLinePositionSpan span = diagnostic.Location.GetLineSpan();
+		Assert.AreEqual("things.json", Path.GetFileName(span.Path));
+		Assert.AreEqual(1, span.StartLinePosition.Line);
+		Assert.IsLessThanOrEqualTo(json.Split('\n')[1].Length, span.StartLinePosition.Character);
+	}
+
+	[TestMethod]
+	public void AShapeFailureWithNoPositionIsStillReportedWithoutALocation()
+	{
+		GeneratorRunResult result = Harness.Run(new UnsupportedShapeGenerator());
+
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(Location.None, result.Diagnostics[0].Location);
+	}
+
+	private static Diagnostic ParseFailure(string json)
+	{
+		GeneratorRunResult result = Harness.Run(
+			new ThingsGenerator(),
+			new Dictionary<string, string> { ["things.json"] = json });
+
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		return result.Diagnostics[0];
 	}
 
 	[TestMethod]
@@ -157,6 +224,25 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
+	[DataRow("""{"things":[{"size":"1"}]}""", "NullReferenceException", DisplayName = "NullReferenceException")]
+	[DataRow("""{"things":[{"name":"a","size":"big"}]}""", "FormatException", DisplayName = "FormatException")]
+	[DataRow("""{"things":[{"name":"a","size":"99999999999"}]}""", "OverflowException", DisplayName = "OverflowException")]
+	public void AnyExceptionFromModelCodeIsReportedRatherThanCrashingTheGenerator(string things, string exceptionType)
+	{
+		GeneratorRunResult result = Harness.Run(
+			new ParsedPairGenerator(),
+			new Dictionary<string, string> { ["things.json"] = things });
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		StringAssert.Contains(result.Diagnostics[0].GetMessage(), "things.json");
+		StringAssert.Contains(result.Diagnostics[0].GetMessage(), exceptionType);
+		Assert.AreEqual(1, result.GeneratedSources.Length);
+		StringAssert.Contains(result.GeneratedSources[0].SourceText.ToString(), "1 others, things unread");
+	}
+
+	[TestMethod]
 	public void AJsonNullDocumentIsReportedRatherThanTreatedAsEmpty()
 	{
 		GeneratorRunResult result = Harness.Run(
@@ -224,12 +310,55 @@ public sealed class GeneratorBaseTests
 	[DataRow("\n")]
 	[DataRow("\r\n")]
 	[DataRow("\r")]
+	[DataRow("\u0085")]
+	[DataRow("\u2028")]
+	[DataRow("\u2029")]
 	public void AMultiLineCopyrightIsCommentedOnEveryLine(string lineBreak)
 	{
 		string source = HeaderProbe.Write($"Copyright (c) Example.{lineBreak}{lineBreak}All rights reserved.");
 
-		Assert.AreEqual("// Copyright (c) Example.\n//\n// All rights reserved.\n// <auto-generated />\n\nnamespace Generated { }\n", source);
+		Assert.AreEqual("// Copyright (c) Example.\n//\n// All rights reserved.\n// <auto-generated />\n#nullable enable\n\nnamespace Generated { }\n", source);
 		Assert.AreEqual(0, CSharpSyntaxTree.ParseText(source).GetDiagnostics().Count(), source);
+	}
+
+	[TestMethod]
+	public void TheHeaderEnablesNullableAfterTheGeneratedMarker() =>
+		StringAssert.Contains(HeaderProbe.Write(null), "// <auto-generated />\n#nullable enable\n");
+
+	[TestMethod]
+	public void AnnotatedGeneratedMembersCompileWithoutCS8669()
+	{
+		ImmutableArray<Diagnostic> diagnostics = CompileWithConsumer("int n = t.Description?.Length ?? 0;");
+
+		Assert.IsFalse(diagnostics.Any(d => d.Id == "CS8669"), string.Join("\n", diagnostics));
+	}
+
+	[TestMethod]
+	public void UnannotatedGeneratedMembersAreNotNullOblivious()
+	{
+		ImmutableArray<Diagnostic> diagnostics = CompileWithConsumer("t.Name = null;");
+
+		Assert.IsTrue(diagnostics.Any(d => d.Id == "CS8625"), string.Join("\n", diagnostics));
+	}
+
+	/// <summary>
+	/// Compiles a <see cref="GeneratorBase.WriteSourceFile"/> class holding a <c>string?</c> and a
+	/// <c>string</c> member, next to a consumer statement, the way a nullable-enabled project would.
+	/// </summary>
+	private static ImmutableArray<Diagnostic> CompileWithConsumer(string statement)
+	{
+		string generated = SourceFileProbe.WriteThingWithNullableAndNonNullableMembers();
+		string consumer = $"namespace Consumer {{ public static class User {{ public static void Use(Generated.Thing t) {{ {statement} }} }} }}";
+
+		CSharpCompilation compilation = CSharpCompilation.Create(
+			assemblyName: "NullableConsumer",
+			syntaxTrees: [CSharpSyntaxTree.ParseText(generated, path: "Thing.g.cs"), CSharpSyntaxTree.ParseText(consumer, path: "User.cs")],
+			references: [MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+			options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary, nullableContextOptions: NullableContextOptions.Enable));
+
+		ImmutableArray<Diagnostic> diagnostics = compilation.GetDiagnostics();
+		Assert.IsFalse(diagnostics.Any(d => d.Severity == DiagnosticSeverity.Error), generated + "\n" + string.Join("\n", diagnostics));
+		return diagnostics;
 	}
 
 	[TestMethod]

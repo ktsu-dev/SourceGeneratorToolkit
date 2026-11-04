@@ -1,3 +1,29 @@
+## v1.2.8 (patch)
+
+Changes since v1.2.7:
+
+- Say what a null copyright leaves out of the header (Claude)
+- Enable nullable in every generated file's header [patch] (Claude)
+- Split a copyright at NEL, LINE SEPARATOR and PARAGRAPH SEPARATOR too [patch] (Claude)
+
+## v1.2.8-pre.2 (prerelease)
+
+Changes since v1.2.8-pre.1:
+
+- Bump MSTest.Sdk from 4.5.1 to 4.5.2 (dependabot[bot])
+
+## v1.2.8-pre.1 (prerelease)
+
+Changes since v1.2.7:
+
+- Bump the system group with 2 updates (dependabot[bot])
+
+## v1.2.7 (patch)
+
+Changes since v1.2.6:
+
+- Report malformed metadata JSON at the line it breaks on [patch] (Claude)
+
 ## v1.2.7-pre.3 (prerelease)
 
 Changes since v1.2.7-pre.2:

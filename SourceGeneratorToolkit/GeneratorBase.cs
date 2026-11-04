@@ -9,6 +9,7 @@ using System.Linq;
 using ktsu.CodeBlocker;
 using ktsu.CodeBlocker.Templates;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Text;
 
 /// <summary>
@@ -64,8 +65,13 @@ public abstract class GeneratorBase : IIncrementalGenerator
 			})
 			.Collect();
 
-		context.RegisterSourceOutput(metadataFiles, (productionContext, files) =>
+		IncrementalValueProvider<(ImmutableArray<MetadataFile> Files, ParseOptions Options)> inputs =
+			metadataFiles.Combine(context.ParseOptionsProvider);
+
+		context.RegisterSourceOutput(inputs, (productionContext, input) =>
 		{
+			ImmutableArray<MetadataFile> files = input.Files;
+
 			// A duplicate name means the same metadata reached the compilation twice; the first with
 			// content wins. An empty file is still present, so it is handed on and fails to parse
 			// rather than being reported as missing.
@@ -83,8 +89,33 @@ public abstract class GeneratorBase : IIncrementalGenerator
 				productionContext.Report(MetadataFileMissing, name);
 			}
 
-			Generate(productionContext, new MetadataSet(byName));
+			RunForLanguageVersion(
+				(input.Options as CSharpParseOptions)?.LanguageVersion,
+				() => Generate(productionContext, new MetadataSet(byName)));
 		});
+	}
+
+	/// <summary>
+	/// Runs an action with the consumer's language version available to <see cref="WriteFileHeader(CodeBlocker, string?)"/>.
+	/// </summary>
+	/// <param name="languageVersion">The consuming compilation's language version, if known.</param>
+	/// <param name="action">The action to run.</param>
+	/// <remarks>
+	/// Held for the duration of the action so the static header writer, which has no access to the
+	/// compilation, can still match its output to the consumer's language version.
+	/// </remarks>
+	private static void RunForLanguageVersion(LanguageVersion? languageVersion, Action action)
+	{
+		LanguageVersion? previous = consumerLanguageVersion;
+		consumerLanguageVersion = languageVersion;
+		try
+		{
+			action();
+		}
+		finally
+		{
+			consumerLanguageVersion = previous;
+		}
 	}
 
 	/// <summary>
@@ -110,9 +141,17 @@ public abstract class GeneratorBase : IIncrementalGenerator
 		CodeBlocker.Create(CodeBlocker.DefaultIndentString, NewLines.Lf);
 
 	/// <summary>
-	/// The line breaks a copyright is split on, longest first so CRLF is one break rather than two.
+	/// Every line terminator the C# compiler recognises, which a copyright is split on so no text escapes its
+	/// comment. Longest first, so CRLF is one break rather than two.
 	/// </summary>
-	private static readonly string[] CopyrightLineBreaks = ["\r\n", "\n", "\r"];
+	private static readonly string[] CopyrightLineBreaks = ["\r\n", "\n", "\r", "\u0085", "\u2028", "\u2029"];
+
+	/// <summary>
+	/// The language version of the compilation the generator is currently producing sources for, or
+	/// <see langword="null"/> outside <see cref="Generate"/>.
+	/// </summary>
+	[ThreadStatic]
+	private static LanguageVersion? consumerLanguageVersion;
 
 	/// <summary>
 	/// Writes the header every generated file starts with.
@@ -121,16 +160,43 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// <param name="copyright">
 	/// The copyright written above the generated-file marker, without its <c>//</c> prefix.
 	/// <see langword="null"/> or empty writes only the marker. A multi-line copyright is commented
-	/// line by line, whichever line break it uses, so a consumer's multi-line file header template
+	/// line by line at every line terminator the C# compiler recognises (CR, LF, CRLF, NEL,
+	/// LINE SEPARATOR and PARAGRAPH SEPARATOR), so a consumer's multi-line file header template
 	/// still compiles.
 	/// </param>
 	/// <remarks>
 	/// A parameter rather than a hard-coded literal, so a consuming repository can keep the header in
 	/// step with its own file header template from one place, and so nothing about any one
 	/// repository leaks into this package.
+	/// <para>
+	/// The header ends with <c>#nullable enable</c>. Roslyn compiles a file carrying the
+	/// generated-file marker with the nullable context disabled, whatever the consuming project's
+	/// <c>Nullable</c> setting, so without the directive every <c>?</c> annotation in the output
+	/// raises CS8669 and every unannotated reference member is null-oblivious to its callers.
+	/// </para>
+	/// <para>
+	/// <c>#nullable</c> needs C# 8, so it is left out when the consuming compilation is on an earlier
+	/// language version, such as the C# 7.3 a <c>netstandard2.0</c> or .NET Framework project gets by
+	/// default. Called from <see cref="Generate"/>, the version is the consuming compilation's; called
+	/// anywhere else, it is unknown and the directive is written. Use the overload that takes a
+	/// <see cref="LanguageVersion"/> to choose explicitly.
+	/// </para>
 	/// </remarks>
 	/// <exception cref="ArgumentNullException"><paramref name="codeBlocker"/> is <see langword="null"/>.</exception>
-	protected static void WriteFileHeader(CodeBlocker codeBlocker, string? copyright)
+	protected static void WriteFileHeader(CodeBlocker codeBlocker, string? copyright) =>
+		WriteFileHeader(codeBlocker, copyright, consumerLanguageVersion ?? LanguageVersion.Latest);
+
+	/// <summary>
+	/// Writes the header every generated file starts with, for a consumer on the given language version.
+	/// </summary>
+	/// <param name="codeBlocker">The <see cref="CodeBlocker"/> to write to.</param>
+	/// <param name="copyright">The copyright, as for <see cref="WriteFileHeader(CodeBlocker, string?)"/>.</param>
+	/// <param name="languageVersion">
+	/// The consuming compilation's language version. <c>#nullable enable</c> is written only for C# 8
+	/// and later.
+	/// </param>
+	/// <exception cref="ArgumentNullException"><paramref name="codeBlocker"/> is <see langword="null"/>.</exception>
+	protected static void WriteFileHeader(CodeBlocker codeBlocker, string? copyright, LanguageVersion languageVersion)
 	{
 		Ensure.NotNull(codeBlocker);
 
@@ -143,6 +209,11 @@ public abstract class GeneratorBase : IIncrementalGenerator
 		}
 
 		codeBlocker.WriteLine("// <auto-generated />");
+		if (languageVersion.MapSpecifiedToEffectiveVersion() >= LanguageVersion.CSharp8)
+		{
+			codeBlocker.WriteLine("#nullable enable");
+		}
+
 		codeBlocker.NewLine();
 	}
 
@@ -151,7 +222,7 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// </summary>
 	/// <param name="codeBlocker">The <see cref="CodeBlocker"/> to write to.</param>
 	/// <param name="sourceFileTemplate">The file to write.</param>
-	/// <param name="copyright">The copyright line, as for <see cref="WriteFileHeader"/>.</param>
+	/// <param name="copyright">The copyright line, as for <see cref="WriteFileHeader(CodeBlocker, string?)"/>.</param>
 	/// <exception cref="ArgumentNullException">
 	/// <paramref name="codeBlocker"/> or <paramref name="sourceFileTemplate"/> is <see langword="null"/>.
 	/// </exception>

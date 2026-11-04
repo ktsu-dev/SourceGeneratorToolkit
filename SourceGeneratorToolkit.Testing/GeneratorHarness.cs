@@ -34,6 +34,16 @@ using Microsoft.CodeAnalysis.Text;
 public sealed class GeneratorHarness(string metadataDirectory)
 {
 	/// <summary>
+	/// Gets the C# language version of the compilation the generators run against.
+	/// </summary>
+	/// <remarks>
+	/// <see cref="LanguageVersion.Default"/> unless set. Set it to an older version, such as
+	/// <see cref="LanguageVersion.CSharp7_3"/>, to check that a generator's output still parses for a
+	/// <c>netstandard2.0</c> or .NET Framework consumer that does not set <c>LangVersion</c>.
+	/// </remarks>
+	public LanguageVersion LanguageVersion { get; init; } = LanguageVersion.Default;
+
+	/// <summary>
 	/// Runs a generator against every metadata file in the directory.
 	/// </summary>
 	/// <param name="generator">The generator to run.</param>
@@ -126,7 +136,7 @@ public sealed class GeneratorHarness(string metadataDirectory)
 		GeneratorDriver driver = CSharpGeneratorDriver.Create(
 			generators: [generator.AsSourceGenerator()],
 			additionalTexts: texts,
-			parseOptions: null,
+			parseOptions: ParseOptions,
 			optionsProvider: null,
 			driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
 
@@ -184,11 +194,14 @@ public sealed class GeneratorHarness(string metadataDirectory)
 		return texts;
 	}
 
-	private static GeneratorDriverRunResult Drive(IReadOnlyList<IIncrementalGenerator> generators, List<AdditionalText> texts)
+	private CSharpParseOptions ParseOptions => new(LanguageVersion);
+
+	private GeneratorDriverRunResult Drive(IReadOnlyList<IIncrementalGenerator> generators, List<AdditionalText> texts)
 	{
 		GeneratorDriver driver = CSharpGeneratorDriver.Create(
 			generators: [.. generators.Select(generator => generator.AsSourceGenerator())],
-			additionalTexts: texts);
+			additionalTexts: texts,
+			parseOptions: ParseOptions);
 
 		return driver.RunGenerators(CreateCompilation()).GetRunResult();
 	}
