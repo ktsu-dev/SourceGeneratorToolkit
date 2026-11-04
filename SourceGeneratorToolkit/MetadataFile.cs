@@ -150,8 +150,12 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// <para>
 	/// <see cref="JsonSerializer"/> also lets the model's own constructor exceptions through
 	/// unwrapped, so an ordinary guard clause meeting a missing property throws
-	/// <see cref="ArgumentNullException"/>. <see cref="ArgumentException"/> and its derivations are
-	/// reported the same way.
+	/// <see cref="ArgumentNullException"/>, and ordinary model code throws whatever it throws: a
+	/// <see cref="NullReferenceException"/> from <c>name.Trim()</c> on a missing property, a
+	/// <see cref="FormatException"/> or <see cref="OverflowException"/> from <c>int.Parse</c>. Any of
+	/// those escaping would be the same CS8785, so every exception is reported the same way, with its
+	/// type name in the reason. Only <see cref="OperationCanceledException"/>, which the driver uses
+	/// to stop a run, and <see cref="OutOfMemoryException"/> are let through.
 	/// </para>
 	/// </remarks>
 	public T? Deserialize<T>(SourceProductionContext context, DiagnosticDescriptor parseFailed)
@@ -167,17 +171,10 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			context.ReportAt(parseFailed, LocationOf(ex), FileName, ex.Message);
 			return null;
 		}
-		catch (NotSupportedException ex)
+		catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
 		{
-			return ParseFailed(ex);
-		}
-		catch (InvalidOperationException ex)
-		{
-			return ParseFailed(ex);
-		}
-		catch (ArgumentException ex)
-		{
-			return ParseFailed(ex);
+			context.Report(parseFailed, FileName, $"{ex.GetType().Name}: {ex.Message}");
+			return null;
 		}
 
 		if (metadata is not null)
@@ -187,12 +184,6 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 
 		context.Report(parseFailed, FileName, "the document deserialized to null");
 		return null;
-
-		T? ParseFailed(Exception ex)
-		{
-			context.Report(parseFailed, FileName, ex.Message);
-			return null;
-		}
 	}
 
 	/// <summary>

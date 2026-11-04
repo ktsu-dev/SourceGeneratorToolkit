@@ -127,9 +127,11 @@ side of it.
   means malformed metadata silently generates something wrong. "Malformed" is wider than bad JSON:
   `JsonSerializer` reports a shape it cannot construct as `NotSupportedException` and some
   converter-configuration failures as `InvalidOperationException`, neither of which derives from
-  `JsonException`. `Deserialize<T>` catches all three, because one escaping to the Roslyn driver
-  becomes a generic CS8785 that names neither the file nor the reason — and abandons every other
-  file in the same invocation.
+  `JsonException`, and the model's own constructor or setters throw whatever ordinary code throws
+  (`ArgumentNullException`, `NullReferenceException`, `FormatException`, ...). `Deserialize<T>`
+  reports every exception except `OperationCanceledException` and `OutOfMemoryException`, because
+  one escaping to the Roslyn driver becomes a generic CS8785 that names neither the file nor the
+  reason — and abandons every other file in the same invocation.
 - **The harness is a separate package, not a separate test project.** A consumer testing their own
   generator needs it, so it ships. It is separate from the analyzer package because it reads files,
   which RS1035 bans for code that runs in an analyzer host — and `EnforceExtendedAnalyzerRules`
