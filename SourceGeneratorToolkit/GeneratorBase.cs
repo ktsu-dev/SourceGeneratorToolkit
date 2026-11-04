@@ -49,6 +49,11 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// Gets the descriptor reported when a metadata file cannot be parsed. Its message format takes
 	/// the file name and the reason.
 	/// </summary>
+	/// <remarks>
+	/// Also reported when the compilation holds several files of one declared name with different
+	/// contents. The reason then lists their paths, and none of them is handed to
+	/// <see cref="Generate"/>.
+	/// </remarks>
 	protected abstract DiagnosticDescriptor MetadataParseFailed { get; }
 
 	/// <inheritdoc/>
@@ -72,19 +77,34 @@ public abstract class GeneratorBase : IIncrementalGenerator
 		{
 			ImmutableArray<MetadataFile> files = input.Files;
 
-			// A duplicate name means the same metadata reached the compilation twice; the first with
-			// content wins. An empty file is still present, so it is handed on and fails to parse
-			// rather than being reported as missing.
-			Dictionary<string, MetadataFile> byName = files
-				.GroupBy(file => file.FileName, StringComparer.Ordinal)
-				.ToDictionary(
-					group => group.Key,
-					group => group.FirstOrDefault(file => file.Text.Length > 0) ?? group.First(),
-					StringComparer.Ordinal);
+			// A duplicate name with identical contents means the same metadata reached the compilation
+			// twice; the first with content wins. An empty file is still present, so it is handed on
+			// and fails to parse rather than being reported as missing.
+			Dictionary<string, MetadataFile> byName = new(StringComparer.Ordinal);
+			HashSet<string> conflicted = new(StringComparer.Ordinal);
+			foreach (IGrouping<string, MetadataFile> group in files.GroupBy(file => file.FileName, StringComparer.Ordinal))
+			{
+				// Same-named files with different contents are not one file supplied twice. Picking one
+				// would generate from whichever the build happened to list first, with nothing to say
+				// the other was ignored, so neither is used and both paths are reported.
+				MetadataFile[] withContent = [.. group.Where(file => file.Text.Length > 0)];
+				if (withContent.Select(file => file.Text).Distinct(StringComparer.Ordinal).Skip(1).Any())
+				{
+					conflicted.Add(group.Key);
+					productionContext.Report(
+						MetadataParseFailed,
+						group.Key,
+						"it was supplied more than once with different contents: "
+							+ string.Join(", ", withContent.Select(file => file.FilePath)));
+					continue;
+				}
+
+				byName[group.Key] = withContent.FirstOrDefault() ?? group.First();
+			}
 
 			// A missing file must say so. Producing no output and no explanation is indistinguishable
 			// from a generator that simply had nothing to emit.
-			foreach (string name in wanted.Where(name => !byName.ContainsKey(name)))
+			foreach (string name in wanted.Where(name => !byName.ContainsKey(name) && !conflicted.Contains(name)))
 			{
 				productionContext.Report(MetadataFileMissing, name);
 			}
