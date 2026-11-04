@@ -78,6 +78,7 @@ public sealed class GeneratorBaseTests
 	[TestMethod]
 	[DataRow("\n", DisplayName = "LF")]
 	[DataRow("\r\n", DisplayName = "CRLF")]
+	[DataRow("\r", DisplayName = "CR")]
 	public void AMalformedMetadataFileIsReportedAtTheBadLine(string newLine)
 	{
 		string json = string.Join(newLine, "{", "  \"things\":", "    [1,,2]", "}");
@@ -90,7 +91,7 @@ public sealed class GeneratorBaseTests
 		Assert.AreEqual(2, span.StartLinePosition.Line);
 
 		// System.Text.Json reports the position it had reached, which is the first comma of the pair.
-		Assert.AreEqual(json.Split('\n')[2].IndexOf(",,", StringComparison.Ordinal), span.StartLinePosition.Character);
+		Assert.AreEqual("    [1,,2]".IndexOf(",,", StringComparison.Ordinal), span.StartLinePosition.Character);
 	}
 
 	[TestMethod]

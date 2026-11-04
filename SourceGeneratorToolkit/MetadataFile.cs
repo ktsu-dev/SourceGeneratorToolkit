@@ -223,16 +223,30 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 		}
 
 		long bytes = ex.BytePositionInLine ?? 0;
-		while (bytes > 0 && index < Text.Length && Text[index] is not '\r' and not '\n')
+		while (bytes > 0 && index < Text.Length && !EndsLine(index))
 		{
 			int width = CharactersAt(index);
 			bytes -= Utf8Bytes(index, width);
 			index += width;
 		}
 
-		int length = index < Text.Length && Text[index] is not '\r' and not '\n' ? 1 : 0;
+		int length = index < Text.Length && !EndsLine(index) ? 1 : 0;
 		return LocationAt(index, length);
 	}
+
+	/// <summary>
+	/// Says whether the character at an offset ends a line as System.Text.Json counts lines: a
+	/// <c>\n</c>, or the <c>\r</c> of a <c>\r\n</c> pair.
+	/// </summary>
+	/// <param name="index">The offset of the character.</param>
+	/// <returns><see langword="true"/> when the character ends the line.</returns>
+	/// <remarks>
+	/// A lone <c>\r</c> is not a line break to System.Text.Json, so in a file with CR-only line
+	/// endings it reports every position on line zero, measured from the start of the file. Stopping
+	/// at that <c>\r</c> would clamp the position to the end of the first line.
+	/// </remarks>
+	private bool EndsLine(int index) =>
+		Text[index] == '\n' || (Text[index] == '\r' && index + 1 < Text.Length && Text[index + 1] == '\n');
 
 	/// <summary>
 	/// Finds where a line starts, counting lines by <c>\n</c> line feeds as System.Text.Json does.
