@@ -62,6 +62,64 @@ public sealed class GeneratorBaseTests
 		StringAssert.Contains(result.Diagnostics[0].GetMessage(), "others.json");
 	}
 
+	private const string OldThings = """{ "things": [ { "name": "Old" } ] }""";
+
+	private const string NewThings = """{ "things": [ { "name": "New" } ] }""";
+
+	private static GeneratorDriverRunResult DriveWithTexts(params (string Path, string Text)[] files)
+	{
+		GeneratorDriver driver = CSharpGeneratorDriver.Create(
+			[new ThingsGenerator().AsSourceGenerator()],
+			[.. files.Select(file => (AdditionalText)new PathedText(file.Path, file.Text))]);
+
+		return driver.RunGenerators(CSharpCompilation.Create("Duplicates")).GetRunResult();
+	}
+
+	[TestMethod]
+	public void SameNamedMetadataFilesWithDifferentContentsAreReportedWithBothPaths()
+	{
+		GeneratorDriverRunResult result = DriveWithTexts(
+			("/a/Legacy/things.json", OldThings),
+			("/a/Metadata/things.json", NewThings));
+
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		string message = result.Diagnostics[0].GetMessage();
+		StringAssert.Contains(message, "/a/Legacy/things.json");
+		StringAssert.Contains(message, "/a/Metadata/things.json");
+		Assert.AreEqual(0, result.GeneratedTrees.Length);
+	}
+
+	[TestMethod]
+	public void SameNamedMetadataFilesWithIdenticalContentsAreNotReported()
+	{
+		GeneratorDriverRunResult result = DriveWithTexts(
+			("/a/Legacy/things.json", NewThings),
+			("/a/Metadata/things.json", NewThings));
+
+		Assert.AreEqual(0, result.Diagnostics.Length);
+		Assert.AreEqual(1, result.GeneratedTrees.Length);
+		StringAssert.Contains(result.GeneratedTrees[0].ToString(), "class New");
+	}
+
+	[TestMethod]
+	public void AnEmptyDuplicateOfAMetadataFileIsNotAConflict()
+	{
+		GeneratorDriverRunResult result = DriveWithTexts(
+			("/a/Legacy/things.json", string.Empty),
+			("/a/Metadata/things.json", NewThings));
+
+		Assert.AreEqual(0, result.Diagnostics.Length);
+		StringAssert.Contains(result.GeneratedTrees[0].ToString(), "class New");
+	}
+
+	private sealed class PathedText(string path, string text) : AdditionalText
+	{
+		public override string Path { get; } = path;
+
+		public override SourceText GetText(System.Threading.CancellationToken cancellationToken = default) => SourceText.From(text);
+	}
+
 	[TestMethod]
 	public void AMalformedMetadataFileIsReportedRatherThanSwallowed()
 	{

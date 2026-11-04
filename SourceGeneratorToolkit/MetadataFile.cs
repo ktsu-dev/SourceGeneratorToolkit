@@ -32,23 +32,23 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 		PropertyNameCaseInsensitive = true
 	};
 
-	/// <summary>
-	/// The full path, held as a field rather than read from the constructor parameter so
-	/// <see cref="Equals(MetadataFile)"/> can compare it on another instance.
-	/// </summary>
-	private readonly string filePath = path;
-
 	/// <summary>Gets the file's name, without its directory.</summary>
 	public string FileName { get; } = fileName;
 
 	/// <summary>Gets the file's contents.</summary>
 	public string Text { get; } = text;
 
+	/// <summary>
+	/// Gets the file's full path. Held rather than read from the constructor parameter so
+	/// <see cref="Equals(MetadataFile)"/> can compare it on another instance.
+	/// </summary>
+	internal string FilePath { get; } = path;
+
 	/// <inheritdoc/>
 	public bool Equals(MetadataFile? other) =>
 		other is not null
 		&& string.Equals(FileName, other.FileName, StringComparison.Ordinal)
-		&& string.Equals(filePath, other.filePath, StringComparison.Ordinal)
+		&& string.Equals(FilePath, other.FilePath, StringComparison.Ordinal)
 		&& string.Equals(Text, other.Text, StringComparison.Ordinal);
 
 	/// <inheritdoc/>
@@ -60,7 +60,7 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 		unchecked
 		{
 			int hash = StringComparer.Ordinal.GetHashCode(FileName);
-			hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(filePath);
+			hash = (hash * 397) ^ StringComparer.Ordinal.GetHashCode(FilePath);
 			return (hash * 397) ^ StringComparer.Ordinal.GetHashCode(Text);
 		}
 	}
@@ -277,7 +277,7 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	private Location LocationAt(int index, int length)
 	{
 		TextSpan span = new(index, length);
-		return Location.Create(filePath, span, sourceText!.Lines.GetLinePositionSpan(span));
+		return Location.Create(FilePath, span, sourceText!.Lines.GetLinePositionSpan(span));
 	}
 }
 

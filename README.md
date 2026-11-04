@@ -246,7 +246,7 @@ land in the test project's compile references and collide with the in-box types 
 | `MetadataFileNames` | `IReadOnlyList<string>` | The metadata files this generator reads, without their directories. Abstract. |
 | `Diagnostics` | `DiagnosticCatalog` | The catalogue this generator's diagnostics are allocated from. Abstract. |
 | `MetadataFileMissing` | `DiagnosticDescriptor` | Reported when a declared file is not in the compilation. Takes the file name. Abstract. |
-| `MetadataParseFailed` | `DiagnosticDescriptor` | Reported when a file cannot be parsed. Takes the file name and the reason. Abstract. |
+| `MetadataParseFailed` | `DiagnosticDescriptor` | Reported when a file cannot be parsed, or when several files of one declared name have different contents (the reason lists their paths, and none is used). Takes the file name and the reason. Abstract. |
 
 #### Methods
 
