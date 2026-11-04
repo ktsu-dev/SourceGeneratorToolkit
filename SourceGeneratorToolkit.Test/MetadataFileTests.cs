@@ -111,6 +111,47 @@ public sealed class MetadataFileTests
 		Assert.AreEqual(2, scoped.GetLineSpan().StartLinePosition.Line);
 	}
 
+	private const string CompoundNames = """
+		{"units":[
+		{"name":"SquareMeter","base":"Second"},
+		{"name":"Meter","base":"Second"}
+		]}
+		""";
+
+	[TestMethod]
+	public void FindLocationSkipsALongerNameThatContainsTheNeedle()
+	{
+		MetadataFile file = new("units.json", CompoundNames, SourceText.From(CompoundNames), "/repo/units.json");
+
+		Location location = file.FindLocation("Meter");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual("Meter", CompoundNames.Substring(location.SourceSpan.Start, location.SourceSpan.Length));
+		Assert.AreEqual('"', CompoundNames[location.SourceSpan.Start - 1]);
+	}
+
+	[TestMethod]
+	public void ScopedFindLocationSkipsALongerNameThatContainsTheAnchor()
+	{
+		MetadataFile file = new("units.json", CompoundNames, SourceText.From(CompoundNames), "/repo/units.json");
+
+		Location location = file.FindLocation("Meter", "Second");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual("Second", CompoundNames.Substring(location.SourceSpan.Start, location.SourceSpan.Length));
+	}
+
+	[TestMethod]
+	public void FindLocationStillFindsTextThatIsNotAWholeString()
+	{
+		const string text = """{"things":[{"name":"Alpha","size":12345}]}""";
+		MetadataFile file = new("things.json", text, SourceText.From(text), "/repo/things.json");
+
+		Location location = file.FindLocation("2345");
+
+		Assert.AreEqual("2345", text.Substring(location.SourceSpan.Start, location.SourceSpan.Length));
+	}
+
 	[TestMethod]
 	public void ScopedFindLocationFallsBackWhenTheAnchorIsAbsent()
 	{

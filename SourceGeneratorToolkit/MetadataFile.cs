@@ -86,7 +86,7 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return Location.None;
 		}
 
-		int index = Text.IndexOf(needle, StringComparison.Ordinal);
+		int index = IndexOfToken(needle, 0);
 		return index < 0 ? Location.None : LocationAt(index, needle.Length);
 	}
 
@@ -113,14 +113,33 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return Location.None;
 		}
 
-		int scope = string.IsNullOrEmpty(anchor) ? 0 : Text.IndexOf(anchor, StringComparison.Ordinal);
+		int scope = string.IsNullOrEmpty(anchor) ? 0 : IndexOfToken(anchor, 0);
 		if (scope < 0)
 		{
 			return FindLocation(needle);
 		}
 
-		int index = Text.IndexOf(needle, scope, StringComparison.Ordinal);
+		int index = IndexOfToken(needle, scope);
 		return index < 0 ? FindLocation(needle) : LocationAt(index, needle.Length);
+	}
+
+	/// <summary>
+	/// Finds <paramref name="value"/> at or after <paramref name="startIndex"/>, preferring an
+	/// occurrence that is a whole JSON string.
+	/// </summary>
+	/// <param name="value">The text to find.</param>
+	/// <param name="startIndex">Where the search starts.</param>
+	/// <returns>The index of the text itself, inside its quotes when it was found quoted, or -1.</returns>
+	/// <remarks>
+	/// A plain substring search lands inside longer names: <c>Meter</c> is found in
+	/// <c>"SquareMeter"</c>, which is a different entry. Looking for <c>"Meter"</c> first matches
+	/// only the whole string. The raw search remains the fallback so that text which is not a JSON
+	/// string on its own, such as a number or an already quoted anchor, is still found.
+	/// </remarks>
+	private int IndexOfToken(string value, int startIndex)
+	{
+		int quoted = Text.IndexOf("\"" + value + "\"", startIndex, StringComparison.Ordinal);
+		return quoted >= 0 ? quoted + 1 : Text.IndexOf(value, startIndex, StringComparison.Ordinal);
 	}
 
 	/// <summary>
@@ -150,8 +169,12 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// <para>
 	/// <see cref="JsonSerializer"/> also lets the model's own constructor exceptions through
 	/// unwrapped, so an ordinary guard clause meeting a missing property throws
-	/// <see cref="ArgumentNullException"/>. <see cref="ArgumentException"/> and its derivations are
-	/// reported the same way.
+	/// <see cref="ArgumentNullException"/>, and ordinary model code throws whatever it throws: a
+	/// <see cref="NullReferenceException"/> from <c>name.Trim()</c> on a missing property, a
+	/// <see cref="FormatException"/> or <see cref="OverflowException"/> from <c>int.Parse</c>. Any of
+	/// those escaping would be the same CS8785, so every exception is reported the same way, with its
+	/// type name in the reason. Only <see cref="OperationCanceledException"/>, which the driver uses
+	/// to stop a run, and <see cref="OutOfMemoryException"/> are let through.
 	/// </para>
 	/// </remarks>
 	public T? Deserialize<T>(SourceProductionContext context, DiagnosticDescriptor parseFailed)
@@ -167,17 +190,10 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			context.ReportAt(parseFailed, LocationOf(ex), FileName, ex.Message);
 			return null;
 		}
-		catch (NotSupportedException ex)
+		catch (Exception ex) when (ex is not OperationCanceledException and not OutOfMemoryException)
 		{
-			return ParseFailed(ex);
-		}
-		catch (InvalidOperationException ex)
-		{
-			return ParseFailed(ex);
-		}
-		catch (ArgumentException ex)
-		{
-			return ParseFailed(ex);
+			context.Report(parseFailed, FileName, $"{ex.GetType().Name}: {ex.Message}");
+			return null;
 		}
 
 		if (metadata is not null)
@@ -187,12 +203,6 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 
 		context.Report(parseFailed, FileName, "the document deserialized to null");
 		return null;
-
-		T? ParseFailed(Exception ex)
-		{
-			context.Report(parseFailed, FileName, ex.Message);
-			return null;
-		}
 	}
 
 	/// <summary>
@@ -223,16 +233,30 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 		}
 
 		long bytes = ex.BytePositionInLine ?? 0;
-		while (bytes > 0 && index < Text.Length && Text[index] is not '\r' and not '\n')
+		while (bytes > 0 && index < Text.Length && !EndsLine(index))
 		{
 			int width = CharactersAt(index);
 			bytes -= Utf8Bytes(index, width);
 			index += width;
 		}
 
-		int length = index < Text.Length && Text[index] is not '\r' and not '\n' ? 1 : 0;
+		int length = index < Text.Length && !EndsLine(index) ? 1 : 0;
 		return LocationAt(index, length);
 	}
+
+	/// <summary>
+	/// Says whether the character at an offset ends a line as System.Text.Json counts lines: a
+	/// <c>\n</c>, or the <c>\r</c> of a <c>\r\n</c> pair.
+	/// </summary>
+	/// <param name="index">The offset of the character.</param>
+	/// <returns><see langword="true"/> when the character ends the line.</returns>
+	/// <remarks>
+	/// A lone <c>\r</c> is not a line break to System.Text.Json, so in a file with CR-only line
+	/// endings it reports every position on line zero, measured from the start of the file. Stopping
+	/// at that <c>\r</c> would clamp the position to the end of the first line.
+	/// </remarks>
+	private bool EndsLine(int index) =>
+		Text[index] == '\n' || (Text[index] == '\r' && index + 1 < Text.Length && Text[index + 1] == '\n');
 
 	/// <summary>
 	/// Finds where a line starts, counting lines by <c>\n</c> line feeds as System.Text.Json does.

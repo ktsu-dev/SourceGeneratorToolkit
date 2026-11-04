@@ -291,6 +291,58 @@ internal sealed class GuardedPairGenerator : GeneratorBase
 }
 
 /// <summary>
+/// An entry whose constructor does what ordinary model code does with its input, and so throws
+/// <see cref="System.NullReferenceException"/>, <see cref="System.FormatException"/> or
+/// <see cref="System.OverflowException"/> rather than an argument exception.
+/// </summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1062:Validate arguments of public methods", Justification = "The missing guard is the point: a missing name has to throw NullReferenceException.")]
+public sealed class ParsedThing(string name, string size)
+{
+	public string Name { get; } = name.Trim();
+
+	public string Size { get; } = size;
+
+	public int SizeValue { get; } = int.Parse(size, System.Globalization.CultureInfo.InvariantCulture);
+}
+
+/// <summary>A metadata shape whose entries are <see cref="ParsedThing"/>.</summary>
+public sealed class ParsedThingsMetadata
+{
+	public List<ParsedThing> Things { get; set; } = [];
+}
+
+/// <summary>
+/// Reads both metadata files, the first into <see cref="ParsedThingsMetadata"/>, and emits from
+/// whichever one deserialized.
+/// </summary>
+internal sealed class ParsedPairGenerator : GeneratorBase
+{
+	protected override IReadOnlyList<string> MetadataFileNames => ["things.json", "others.json"];
+
+	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, MetadataSet metadata)
+	{
+		ParsedThingsMetadata? things = metadata["things.json"]?.Deserialize<ParsedThingsMetadata>(context, MetadataParseFailed);
+		OthersMetadata? others = metadata["others.json"]?.Deserialize<OthersMetadata>(context, MetadataParseFailed);
+
+		if (others is null)
+		{
+			return;
+		}
+
+		using CodeBlocker codeBlocker = CreateCodeBlocker();
+		WriteFileHeader(codeBlocker, TestDiagnostics.Copyright);
+		codeBlocker.WriteLine($"// {others.Others.Count} others, things {(things is null ? "unread" : "read")}");
+		context.AddSource("Parsed.g.cs", codeBlocker.ToString());
+	}
+}
+
+/// <summary>
 /// Declares a file nothing supplies, so the missing-file path has a generator to run.
 /// </summary>
 internal sealed class AbsentFileGenerator() : GeneratorBase<ThingsMetadata>("nowhere.json")

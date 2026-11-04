@@ -136,6 +136,7 @@ public sealed class GeneratorBaseTests
 	[TestMethod]
 	[DataRow("\n", DisplayName = "LF")]
 	[DataRow("\r\n", DisplayName = "CRLF")]
+	[DataRow("\r", DisplayName = "CR")]
 	public void AMalformedMetadataFileIsReportedAtTheBadLine(string newLine)
 	{
 		string json = string.Join(newLine, "{", "  \"things\":", "    [1,,2]", "}");
@@ -148,7 +149,7 @@ public sealed class GeneratorBaseTests
 		Assert.AreEqual(2, span.StartLinePosition.Line);
 
 		// System.Text.Json reports the position it had reached, which is the first comma of the pair.
-		Assert.AreEqual(json.Split('\n')[2].IndexOf(",,", StringComparison.Ordinal), span.StartLinePosition.Character);
+		Assert.AreEqual("    [1,,2]".IndexOf(",,", StringComparison.Ordinal), span.StartLinePosition.Character);
 	}
 
 	[TestMethod]
@@ -276,6 +277,25 @@ public sealed class GeneratorBaseTests
 		Assert.AreEqual(1, result.Diagnostics.Length);
 		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
 		StringAssert.Contains(result.Diagnostics[0].GetMessage(), "things.json");
+		Assert.AreEqual(1, result.GeneratedSources.Length);
+		StringAssert.Contains(result.GeneratedSources[0].SourceText.ToString(), "1 others, things unread");
+	}
+
+	[TestMethod]
+	[DataRow("""{"things":[{"size":"1"}]}""", "NullReferenceException", DisplayName = "NullReferenceException")]
+	[DataRow("""{"things":[{"name":"a","size":"big"}]}""", "FormatException", DisplayName = "FormatException")]
+	[DataRow("""{"things":[{"name":"a","size":"99999999999"}]}""", "OverflowException", DisplayName = "OverflowException")]
+	public void AnyExceptionFromModelCodeIsReportedRatherThanCrashingTheGenerator(string things, string exceptionType)
+	{
+		GeneratorRunResult result = Harness.Run(
+			new ParsedPairGenerator(),
+			new Dictionary<string, string> { ["things.json"] = things });
+
+		Assert.IsNull(result.Exception, $"The generator threw instead of reporting a diagnostic: {result.Exception}");
+		Assert.AreEqual(1, result.Diagnostics.Length);
+		Assert.AreEqual(TestDiagnostics.MetadataParseFailed.Id, result.Diagnostics[0].Id);
+		StringAssert.Contains(result.Diagnostics[0].GetMessage(), "things.json");
+		StringAssert.Contains(result.Diagnostics[0].GetMessage(), exceptionType);
 		Assert.AreEqual(1, result.GeneratedSources.Length);
 		StringAssert.Contains(result.GeneratedSources[0].SourceText.ToString(), "1 others, things unread");
 	}
