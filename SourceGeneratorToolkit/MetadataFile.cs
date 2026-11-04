@@ -86,7 +86,7 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return Location.None;
 		}
 
-		int index = Text.IndexOf(needle, StringComparison.Ordinal);
+		int index = IndexOfToken(needle, 0);
 		return index < 0 ? Location.None : LocationAt(index, needle.Length);
 	}
 
@@ -113,14 +113,33 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return Location.None;
 		}
 
-		int scope = string.IsNullOrEmpty(anchor) ? 0 : Text.IndexOf(anchor, StringComparison.Ordinal);
+		int scope = string.IsNullOrEmpty(anchor) ? 0 : IndexOfToken(anchor, 0);
 		if (scope < 0)
 		{
 			return FindLocation(needle);
 		}
 
-		int index = Text.IndexOf(needle, scope, StringComparison.Ordinal);
+		int index = IndexOfToken(needle, scope);
 		return index < 0 ? FindLocation(needle) : LocationAt(index, needle.Length);
+	}
+
+	/// <summary>
+	/// Finds <paramref name="value"/> at or after <paramref name="startIndex"/>, preferring an
+	/// occurrence that is a whole JSON string.
+	/// </summary>
+	/// <param name="value">The text to find.</param>
+	/// <param name="startIndex">Where the search starts.</param>
+	/// <returns>The index of the text itself, inside its quotes when it was found quoted, or -1.</returns>
+	/// <remarks>
+	/// A plain substring search lands inside longer names: <c>Meter</c> is found in
+	/// <c>"SquareMeter"</c>, which is a different entry. Looking for <c>"Meter"</c> first matches
+	/// only the whole string. The raw search remains the fallback so that text which is not a JSON
+	/// string on its own, such as a number or an already quoted anchor, is still found.
+	/// </remarks>
+	private int IndexOfToken(string value, int startIndex)
+	{
+		int quoted = Text.IndexOf("\"" + value + "\"", startIndex, StringComparison.Ordinal);
+		return quoted >= 0 ? quoted + 1 : Text.IndexOf(value, startIndex, StringComparison.Ordinal);
 	}
 
 	/// <summary>
