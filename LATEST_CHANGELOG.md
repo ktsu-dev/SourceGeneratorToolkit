@@ -2,6 +2,8 @@
 
 Changes since v1.2.0:
 
+- Add a SessionStart hook for Claude Code cloud sessions (#52) (matt-edmondson)
+- Report same-named metadata files whose contents differ [patch] (#64) (matt-edmondson)
 - Report any exception from model code instead of crashing the generator [patch] (#65) (matt-edmondson)
 - Find a whole JSON string before a substring in FindLocation [patch] (#63) (matt-edmondson)
 - Locate a parse failure in a CR-only metadata file on its real line [patch] (#62) (matt-edmondson)
