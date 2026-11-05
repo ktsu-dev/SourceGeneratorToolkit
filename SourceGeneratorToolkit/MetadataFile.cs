@@ -91,8 +91,9 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	}
 
 	/// <summary>
-	/// Finds <paramref name="needle"/> at or after the first occurrence of <paramref name="anchor"/>,
-	/// and returns a location covering it.
+	/// Finds <paramref name="needle"/> in the JSON object that holds the first occurrence of
+	/// <paramref name="anchor"/>, preferring an occurrence after the anchor, and returns a location
+	/// covering it.
 	/// </summary>
 	/// <param name="anchor">Text that scopes the search — typically the entry the needle belongs to.</param>
 	/// <param name="needle">The text to find within that scope.</param>
@@ -105,6 +106,13 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// definition occurs once. It is not enough when the needle is a name that is spelled correctly
 	/// in dozens of places and only wrong in one of them — there the first occurrence is somewhere
 	/// else entirely. Anchoring on the surrounding entry picks the right one.
+	/// <para>
+	/// JSON objects have no key order, so the needle can be written before the anchor in the same
+	/// entry, as in <c>{"base":"Meter","name":"Foot"}</c>. Searching only forward from the anchor
+	/// would then land in a later entry, or fall back to an earlier one. The search therefore looks
+	/// after the anchor within its enclosing object, then before it within that object, and only
+	/// then forward past the object and finally anywhere in the file.
+	/// </para>
 	/// </remarks>
 	public Location FindLocation(string anchor, string needle)
 	{
@@ -119,8 +127,100 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return FindLocation(needle);
 		}
 
-		int index = IndexOfToken(needle, scope);
+		int index = -1;
+		if (TryGetEnclosingObject(scope, out int open, out int close))
+		{
+			index = IndexOfToken(needle, scope, close);
+			if (index < 0)
+			{
+				index = IndexOfToken(needle, open, scope);
+			}
+		}
+
+		if (index < 0)
+		{
+			index = IndexOfToken(needle, scope);
+		}
+
 		return index < 0 ? FindLocation(needle) : LocationAt(index, needle.Length);
+	}
+
+	/// <summary>
+	/// Finds the JSON object that encloses <paramref name="index"/>.
+	/// </summary>
+	/// <param name="index">A position in the file.</param>
+	/// <param name="open">The index of the object's opening brace.</param>
+	/// <param name="close">
+	/// The index just past the object's closing brace, or the end of the file when it is unclosed.
+	/// </param>
+	/// <returns><see langword="true"/> when <paramref name="index"/> is inside an object.</returns>
+	/// <remarks>
+	/// The file is scanned from the start rather than backwards from the index, because only a
+	/// forward scan can tell which quotes open a string: braces inside strings, and nested objects
+	/// written before the index, must not be taken for the enclosing object's braces.
+	/// </remarks>
+	private bool TryGetEnclosingObject(int index, out int open, out int close)
+	{
+		List<int> opens = [];
+		bool inString = false;
+		bool escaped = false;
+		int depth = -1;
+		open = -1;
+
+		for (int i = 0; i < Text.Length; i++)
+		{
+			if (i == index)
+			{
+				if (opens.Count == 0)
+				{
+					break;
+				}
+
+				open = opens[^1];
+				depth = opens.Count;
+			}
+
+			char c = Text[i];
+			if (inString)
+			{
+				if (escaped)
+				{
+					escaped = false;
+				}
+				else if (c == '\\')
+				{
+					escaped = true;
+				}
+				else if (c == '"')
+				{
+					inString = false;
+				}
+
+				continue;
+			}
+
+			if (c == '"')
+			{
+				inString = true;
+			}
+			else if (c == '{')
+			{
+				opens.Add(i);
+			}
+			else if (c == '}' && opens.Count > 0)
+			{
+				if (opens.Count == depth)
+				{
+					close = i + 1;
+					return true;
+				}
+
+				opens.RemoveAt(opens.Count - 1);
+			}
+		}
+
+		close = Text.Length;
+		return open >= 0;
 	}
 
 	/// <summary>
@@ -136,10 +236,26 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// only the whole string. The raw search remains the fallback so that text which is not a JSON
 	/// string on its own, such as a number or an already quoted anchor, is still found.
 	/// </remarks>
-	private int IndexOfToken(string value, int startIndex)
+	private int IndexOfToken(string value, int startIndex) => IndexOfToken(value, startIndex, Text.Length);
+
+	/// <summary>
+	/// Finds <paramref name="value"/> between <paramref name="startIndex"/> and
+	/// <paramref name="endIndex"/>, preferring an occurrence that is a whole JSON string.
+	/// </summary>
+	/// <param name="value">The text to find.</param>
+	/// <param name="startIndex">Where the search starts.</param>
+	/// <param name="endIndex">Where the search ends; a match must lie wholly before it.</param>
+	/// <returns>The index of the text itself, inside its quotes when it was found quoted, or -1.</returns>
+	private int IndexOfToken(string value, int startIndex, int endIndex)
 	{
-		int quoted = Text.IndexOf("\"" + value + "\"", startIndex, StringComparison.Ordinal);
-		return quoted >= 0 ? quoted + 1 : Text.IndexOf(value, startIndex, StringComparison.Ordinal);
+		int count = endIndex - startIndex;
+		if (count <= 0)
+		{
+			return -1;
+		}
+
+		int quoted = Text.IndexOf("\"" + value + "\"", startIndex, count, StringComparison.Ordinal);
+		return quoted >= 0 ? quoted + 1 : Text.IndexOf(value, startIndex, count, StringComparison.Ordinal);
 	}
 
 	/// <summary>

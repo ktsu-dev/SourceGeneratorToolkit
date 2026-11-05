@@ -172,6 +172,56 @@ public sealed class MetadataFileTests
 		Assert.AreEqual(file.FindLocation("Alpha"), scoped);
 	}
 
+	private const string NeedleFirst = """
+		{"units":[
+		{"base":"Meter","name":"Foot"},
+		{"base":"Meter","name":"Yard"}
+		]}
+		""";
+
+	[TestMethod]
+	public void ScopedFindLocationPicksTheAnchorsEntryWhenTheNeedleIsWrittenFirst()
+	{
+		MetadataFile file = new("units.json", NeedleFirst, SourceText.From(NeedleFirst), "/repo/units.json");
+
+		Location location = file.FindLocation("Foot", "Meter");
+
+		Assert.AreEqual(1, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual("Meter", NeedleFirst.Substring(location.SourceSpan.Start, location.SourceSpan.Length));
+	}
+
+	[TestMethod]
+	public void ScopedFindLocationPicksTheAnchorsEntryOverAnEarlierOne()
+	{
+		const string text = """
+			{"units":[
+			{"base":"Meter","name":"Inch"},
+			{"base":"Meter","name":"Foot"}
+			]}
+			""";
+		MetadataFile file = new("units.json", text, SourceText.From(text), "/repo/units.json");
+
+		Location location = file.FindLocation("Foot", "Meter");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+	}
+
+	[TestMethod]
+	public void ScopedFindLocationSkipsNestedObjectsAndBracesInStringsBeforeTheAnchor()
+	{
+		const string text = """
+			{"units":[
+			{"base":"Meter","name":"Inch"},
+			{"base":"Meter","note":"a } and a {","extra":{"k":"v"},"name":"Foot"}
+			]}
+			""";
+		MetadataFile file = new("units.json", text, SourceText.From(text), "/repo/units.json");
+
+		Location location = file.FindLocation("Foot", "Meter");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+	}
+
 	[TestMethod]
 	public void ScopedFindLocationReturnsNoneForAnEmptyNeedle()
 	{
