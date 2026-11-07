@@ -23,14 +23,31 @@ using Microsoft.CodeAnalysis.Text;
 public sealed class MetadataFile(string fileName, string text, SourceText? sourceText, string path) : IEquatable<MetadataFile>
 {
 	/// <summary>
+	/// Gets the options <see cref="Deserialize{T}(SourceProductionContext, DiagnosticDescriptor)"/>
+	/// reads metadata with: property names match case-insensitively, and <c>//</c> and <c>/* */</c>
+	/// comments and trailing commas are accepted, because metadata files are maintained by hand.
+	/// </summary>
+	/// <remarks>
+	/// Read-only, so it can be shared. To change it, copy it, adjust the copy, and keep that copy in a
+	/// <see langword="static"/> <see langword="readonly"/> field:
+	/// <c>new JsonSerializerOptions(MetadataFile.DefaultSerializerOptions) { Converters = { new JsonStringEnumConverter() } }</c>.
 	/// Allocated once rather than per call: constructing <see cref="JsonSerializerOptions"/> inside
 	/// the method builds a fresh serializer cache every time (CA1869), which for a generator that
 	/// re-reads its metadata on every compilation is the expensive half of the work.
-	/// </summary>
-	private static readonly JsonSerializerOptions DeserializeOptions = new()
+	/// </remarks>
+	public static JsonSerializerOptions DefaultSerializerOptions { get; } = CreateDefaultSerializerOptions();
+
+	private static JsonSerializerOptions CreateDefaultSerializerOptions()
 	{
-		PropertyNameCaseInsensitive = true
-	};
+		JsonSerializerOptions options = new()
+		{
+			PropertyNameCaseInsensitive = true,
+			ReadCommentHandling = JsonCommentHandling.Skip,
+			AllowTrailingCommas = true,
+		};
+		options.MakeReadOnly(populateMissingResolver: true);
+		return options;
+	}
 
 	/// <summary>Gets the file's name, without its directory.</summary>
 	public string FileName { get; } = fileName;
@@ -178,12 +195,38 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// </para>
 	/// </remarks>
 	public T? Deserialize<T>(SourceProductionContext context, DiagnosticDescriptor parseFailed)
+		where T : class =>
+		Deserialize<T>(context, parseFailed, DefaultSerializerOptions);
+
+	/// <summary>
+	/// Deserializes the file into <typeparamref name="T"/> with the given options.
+	/// </summary>
+	/// <typeparam name="T">The metadata shape to deserialize into.</typeparam>
+	/// <param name="context">The source production context, used to report a parse failure.</param>
+	/// <param name="parseFailed">
+	/// The descriptor reported when the file cannot be parsed. Its message format takes the file
+	/// name and the reason.
+	/// </param>
+	/// <param name="options">
+	/// The options to read the file with. Pass a cached instance, such as a copy of
+	/// <see cref="DefaultSerializerOptions"/> held in a <see langword="static"/> <see langword="readonly"/>
+	/// field, rather than a new one per call (CA1869).
+	/// </param>
+	/// <returns>The deserialized metadata, or <see langword="null"/> when parsing failed.</returns>
+	/// <remarks>
+	/// Failures are reported exactly as by
+	/// <see cref="Deserialize{T}(SourceProductionContext, DiagnosticDescriptor)"/>.
+	/// </remarks>
+	/// <exception cref="ArgumentNullException"><paramref name="options"/> is <see langword="null"/>.</exception>
+	public T? Deserialize<T>(SourceProductionContext context, DiagnosticDescriptor parseFailed, JsonSerializerOptions options)
 		where T : class
 	{
+		Ensure.NotNull(options);
+
 		T? metadata;
 		try
 		{
-			metadata = JsonSerializer.Deserialize<T>(Text, DeserializeOptions);
+			metadata = JsonSerializer.Deserialize<T>(Text, options);
 		}
 		catch (JsonException ex)
 		{

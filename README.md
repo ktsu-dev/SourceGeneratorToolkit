@@ -264,6 +264,12 @@ land in the test project's compile references and collide with the in-box types 
 Base for a generator driven by exactly one metadata file, deserialized into `T`. Takes the file
 name as a constructor argument.
 
+#### Properties
+
+| Name | Type | Description |
+|------|------|-------------|
+| `MetadataSerializerOptions` | `JsonSerializerOptions` | The options the file is deserialized with. Defaults to `MetadataFile.DefaultSerializerOptions`. Override it to add converters or a naming policy, returning a cached `static readonly` instance (CA1869). Virtual. |
+
 #### Methods
 
 | Name | Return Type | Description |
@@ -280,6 +286,7 @@ One metadata file a generator asked for, with the text it was found to contain.
 |------|------|-------------|
 | `FileName` | `string` | The file's name, without its directory. |
 | `Text` | `string` | The file's contents. |
+| `DefaultSerializerOptions` | `JsonSerializerOptions` | Static and read-only. Property names match case-insensitively, and `//` and `/* */` comments and trailing commas are accepted, because metadata is written by hand. Copy it with `new JsonSerializerOptions(MetadataFile.DefaultSerializerOptions)` to change it. |
 
 #### Methods
 
@@ -288,6 +295,7 @@ One metadata file a generator asked for, with the text it was found to contain.
 | `FindLocation(string needle)` | `Location` | A location covering the first occurrence of `needle`, or `Location.None`. |
 | `FindLocation(string anchor, string needle)` | `Location` | A location covering the first occurrence of `needle` at or after `anchor`, falling back to the unscoped match and then to `Location.None`. |
 | `Deserialize<T>(SourceProductionContext, DiagnosticDescriptor)` | `T?` | Deserializes the file, reporting the descriptor and returning null on failure. |
+| `Deserialize<T>(SourceProductionContext, DiagnosticDescriptor, JsonSerializerOptions)` | `T?` | The same, reading the file with the given options. |
 
 ### `MetadataSet`
 

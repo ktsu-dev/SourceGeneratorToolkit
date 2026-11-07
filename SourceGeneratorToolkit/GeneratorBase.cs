@@ -6,6 +6,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
+using System.Text.Json;
 using ktsu.CodeBlocker;
 using ktsu.CodeBlocker.Templates;
 using Microsoft.CodeAnalysis;
@@ -291,10 +292,22 @@ public abstract class GeneratorBase<T>(string metadataFileName) : GeneratorBase
 	/// <inheritdoc/>
 	protected sealed override IReadOnlyList<string> MetadataFileNames => [metadataFileName];
 
+	/// <summary>
+	/// Gets the options the metadata file is deserialized with. Defaults to
+	/// <see cref="MetadataFile.DefaultSerializerOptions"/>.
+	/// </summary>
+	/// <remarks>
+	/// Override to add converters, a naming policy or stricter reading. Return a cached
+	/// <see langword="static"/> <see langword="readonly"/> instance rather than a new one per call:
+	/// constructing <see cref="JsonSerializerOptions"/> per call builds a fresh serializer cache every
+	/// time (CA1869).
+	/// </remarks>
+	protected virtual JsonSerializerOptions MetadataSerializerOptions => MetadataFile.DefaultSerializerOptions;
+
 	/// <inheritdoc/>
 	protected sealed override void Generate(SourceProductionContext context, MetadataSet metadata)
 	{
-		T? deserialized = metadata?[metadataFileName]?.Deserialize<T>(context, MetadataParseFailed);
+		T? deserialized = metadata?[metadataFileName]?.Deserialize<T>(context, MetadataParseFailed, MetadataSerializerOptions);
 		if (deserialized is null)
 		{
 			return;
