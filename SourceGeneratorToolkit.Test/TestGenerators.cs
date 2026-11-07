@@ -421,3 +421,38 @@ internal abstract class SourceFileProbe : GeneratorBase
 		return codeBlocker.ToString();
 	}
 }
+
+/// <summary>A second catalogue, so a generator can name one its descriptors weren't allocated from.</summary>
+internal static class OtherDiagnostics
+{
+	internal static DiagnosticCatalog Catalog { get; } = new("OTH", "Other");
+}
+
+/// <summary>Names a null catalogue, which <see cref="GeneratorBase"/> must refuse.</summary>
+internal sealed class NullCatalogGenerator() : GeneratorBase<ThingsMetadata>("things.json")
+{
+	protected override DiagnosticCatalog Diagnostics => null!;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, ThingsMetadata metadata, CodeBlocker codeBlocker) =>
+		context.AddSource("Things.g.cs", "// generated");
+}
+
+/// <summary>
+/// Names a catalogue its descriptors weren't allocated from: the prefix drift
+/// <see cref="DiagnosticCatalog"/> exists to prevent.
+/// </summary>
+internal sealed class MismatchedCatalogGenerator() : GeneratorBase<ThingsMetadata>("things.json")
+{
+	protected override DiagnosticCatalog Diagnostics => OtherDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, ThingsMetadata metadata, CodeBlocker codeBlocker) =>
+		context.AddSource("Things.g.cs", "// generated");
+}
