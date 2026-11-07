@@ -37,6 +37,11 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// <summary>
 	/// Gets the catalogue this generator's diagnostics are allocated from.
 	/// </summary>
+	/// <remarks>
+	/// <see cref="MetadataFileMissing"/> and <see cref="MetadataParseFailed"/> must both be allocated
+	/// from it. <see cref="Initialize"/> throws otherwise, so the two diagnostics this base reports
+	/// cannot drift to a prefix other than the one the generator's own tests enumerate.
+	/// </remarks>
 	protected abstract DiagnosticCatalog Diagnostics { get; }
 
 	/// <summary>
@@ -57,8 +62,14 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	protected abstract DiagnosticDescriptor MetadataParseFailed { get; }
 
 	/// <inheritdoc/>
+	/// <exception cref="InvalidOperationException">
+	/// <see cref="Diagnostics"/> is <see langword="null"/>, or <see cref="MetadataFileMissing"/> or
+	/// <see cref="MetadataParseFailed"/> was not allocated from it.
+	/// </exception>
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
+		EnsureCataloged();
+
 		IReadOnlyList<string> wanted = MetadataFileNames;
 
 		IncrementalValueProvider<ImmutableArray<MetadataFile>> metadataFiles = context.AdditionalTextsProvider
@@ -113,6 +124,35 @@ public abstract class GeneratorBase : IIncrementalGenerator
 				(input.Options as CSharpParseOptions)?.LanguageVersion,
 				() => Generate(productionContext, new MetadataSet(byName)));
 		});
+	}
+
+	// A required catalogue that nothing reads looks enforced and isn't: a generator could report its
+	// two built-in diagnostics under a prefix other than the one it releases and tests, which is the
+	// drift DiagnosticCatalog exists to prevent. Thrown from Initialize, the failure reaches the
+	// consumer's build as the driver's CS8784 warning naming this message, and the generator emits
+	// nothing.
+	private void EnsureCataloged()
+	{
+		DiagnosticCatalog catalog = Diagnostics
+			?? throw new InvalidOperationException($"{GetType().Name}.Diagnostics returned null. A generator must name the catalogue its diagnostics are allocated from.");
+
+		EnsureCataloged(catalog, MetadataFileMissing, nameof(MetadataFileMissing));
+		EnsureCataloged(catalog, MetadataParseFailed, nameof(MetadataParseFailed));
+	}
+
+	private void EnsureCataloged(DiagnosticCatalog catalog, DiagnosticDescriptor? descriptor, string member)
+	{
+		if (descriptor is not null && catalog.Descriptors.Any(cataloged => cataloged.Id == descriptor.Id))
+		{
+			return;
+		}
+
+		string cataloged = catalog.Descriptors.Count == 0
+			? "none"
+			: string.Join(", ", catalog.Descriptors.Select(entry => entry.Id));
+		throw new InvalidOperationException(
+			$"{GetType().Name}.{member} ({descriptor?.Id ?? "null"}) was not allocated from {GetType().Name}.Diagnostics, "
+				+ $"the '{catalog.Category}' catalogue (descriptors: {cataloged}). Allocate it from that catalogue.");
 	}
 
 	/// <summary>
