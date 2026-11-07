@@ -3,6 +3,7 @@
 namespace ktsu.SourceGeneratorToolkit.Test;
 
 using System.Collections.Generic;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using ktsu.CodeBlocker;
 using ktsu.CodeBlocker.Templates;
@@ -419,5 +420,56 @@ internal abstract class SourceFileProbe : GeneratorBase
 		using CodeBlocker codeBlocker = CreateCodeBlocker();
 		WriteSourceFile(codeBlocker, file, TestDiagnostics.Copyright);
 		return codeBlocker.ToString();
+	}
+}
+
+/// <summary>How a <see cref="KindedThing"/> is read from its string name.</summary>
+public enum ThingKind
+{
+	First,
+	Second,
+}
+
+/// <summary>An entry whose kind is an enum, which needs a converter the defaults don't carry.</summary>
+public sealed class KindedThing
+{
+	public string Name { get; set; } = string.Empty;
+
+	public ThingKind Kind { get; set; }
+}
+
+/// <summary>A metadata shape with an enum member.</summary>
+public sealed class KindedThingsMetadata
+{
+	public List<KindedThing> Things { get; set; } = [];
+}
+
+/// <summary>
+/// Overrides <see cref="GeneratorBase{T}.MetadataSerializerOptions"/> to read enums by name, and
+/// emits one class per entry named for its kind.
+/// </summary>
+internal sealed class EnumByNameGenerator() : GeneratorBase<KindedThingsMetadata>("things.json")
+{
+	private static readonly JsonSerializerOptions Options = new(MetadataFile.DefaultSerializerOptions)
+	{
+		Converters = { new JsonStringEnumConverter() },
+	};
+
+	protected override JsonSerializerOptions MetadataSerializerOptions => Options;
+
+	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, KindedThingsMetadata metadata, CodeBlocker codeBlocker)
+	{
+		foreach (KindedThing thing in metadata.Things)
+		{
+			codeBlocker.WriteLine($"// {thing.Name}: {thing.Kind}");
+		}
+
+		context.AddSource("Kinds.g.cs", codeBlocker.ToString());
 	}
 }
