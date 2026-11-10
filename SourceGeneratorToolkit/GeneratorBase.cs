@@ -38,6 +38,11 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// <summary>
 	/// Gets the catalogue this generator's diagnostics are allocated from.
 	/// </summary>
+	/// <remarks>
+	/// <see cref="MetadataFileMissing"/> and <see cref="MetadataParseFailed"/> must both be allocated
+	/// from it. <see cref="Initialize"/> throws otherwise, so the two diagnostics this base reports
+	/// cannot drift to a prefix other than the one the generator's own tests enumerate.
+	/// </remarks>
 	protected abstract DiagnosticCatalog Diagnostics { get; }
 
 	/// <summary>
@@ -58,8 +63,14 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	protected abstract DiagnosticDescriptor MetadataParseFailed { get; }
 
 	/// <inheritdoc/>
+	/// <exception cref="InvalidOperationException">
+	/// <see cref="Diagnostics"/> is <see langword="null"/>, or <see cref="MetadataFileMissing"/> or
+	/// <see cref="MetadataParseFailed"/> was not allocated from it.
+	/// </exception>
 	public void Initialize(IncrementalGeneratorInitializationContext context)
 	{
+		EnsureCataloged();
+
 		IReadOnlyList<string> wanted = MetadataFileNames;
 
 		IncrementalValueProvider<ImmutableArray<MetadataFile>> metadataFiles = context.AdditionalTextsProvider
@@ -114,6 +125,35 @@ public abstract class GeneratorBase : IIncrementalGenerator
 				(input.Options as CSharpParseOptions)?.LanguageVersion,
 				() => Generate(productionContext, new MetadataSet(byName)));
 		});
+	}
+
+	// A required catalogue that nothing reads looks enforced and isn't: a generator could report its
+	// two built-in diagnostics under a prefix other than the one it releases and tests, which is the
+	// drift DiagnosticCatalog exists to prevent. Thrown from Initialize, the failure reaches the
+	// consumer's build as the driver's CS8784 warning naming this message, and the generator emits
+	// nothing.
+	private void EnsureCataloged()
+	{
+		DiagnosticCatalog catalog = Diagnostics
+			?? throw new InvalidOperationException($"{GetType().Name}.Diagnostics returned null. A generator must name the catalogue its diagnostics are allocated from.");
+
+		EnsureCataloged(catalog, MetadataFileMissing, nameof(MetadataFileMissing));
+		EnsureCataloged(catalog, MetadataParseFailed, nameof(MetadataParseFailed));
+	}
+
+	private void EnsureCataloged(DiagnosticCatalog catalog, DiagnosticDescriptor? descriptor, string member)
+	{
+		if (descriptor is not null && catalog.Descriptors.Any(cataloged => cataloged.Id == descriptor.Id))
+		{
+			return;
+		}
+
+		string cataloged = catalog.Descriptors.Count == 0
+			? "none"
+			: string.Join(", ", catalog.Descriptors.Select(entry => entry.Id));
+		throw new InvalidOperationException(
+			$"{GetType().Name}.{member} ({descriptor?.Id ?? "null"}) was not allocated from {GetType().Name}.Diagnostics, "
+				+ $"the '{catalog.Category}' catalogue (descriptors: {cataloged}). Allocate it from that catalogue.");
 	}
 
 	/// <summary>
@@ -244,15 +284,64 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// <param name="codeBlocker">The <see cref="CodeBlocker"/> to write to.</param>
 	/// <param name="sourceFileTemplate">The file to write.</param>
 	/// <param name="copyright">The copyright line, as for <see cref="WriteFileHeader(CodeBlocker, string?)"/>.</param>
+	/// <remarks>
+	/// As with <see cref="WriteFileHeader(CodeBlocker, string?)"/>, the output matches the consuming
+	/// compilation's language version when called from <see cref="Generate"/>, and the latest version
+	/// anywhere else. Use the overload that takes a <see cref="LanguageVersion"/> to choose explicitly.
+	/// </remarks>
 	/// <exception cref="ArgumentNullException">
 	/// <paramref name="codeBlocker"/> or <paramref name="sourceFileTemplate"/> is <see langword="null"/>.
 	/// </exception>
-	protected static void WriteSourceFile(CodeBlocker codeBlocker, SourceFileTemplate sourceFileTemplate, string? copyright)
+	protected static void WriteSourceFile(CodeBlocker codeBlocker, SourceFileTemplate sourceFileTemplate, string? copyright) =>
+		WriteSourceFile(codeBlocker, sourceFileTemplate, copyright, consumerLanguageVersion ?? LanguageVersion.Latest);
+
+	/// <summary>
+	/// Writes a whole source file, header included, for a consumer on the given language version.
+	/// </summary>
+	/// <param name="codeBlocker">The <see cref="CodeBlocker"/> to write to.</param>
+	/// <param name="sourceFileTemplate">The file to write.</param>
+	/// <param name="copyright">The copyright line, as for <see cref="WriteFileHeader(CodeBlocker, string?)"/>.</param>
+	/// <param name="languageVersion">
+	/// The consuming compilation's language version. The template's namespace is file-scoped for C# 10
+	/// and later, and a block around the file's contents before that, where a file-scoped namespace
+	/// does not compile (CS8370/CS8773).
+	/// </param>
+	/// <exception cref="ArgumentNullException">
+	/// <paramref name="codeBlocker"/> or <paramref name="sourceFileTemplate"/> is <see langword="null"/>.
+	/// </exception>
+	protected static void WriteSourceFile(CodeBlocker codeBlocker, SourceFileTemplate sourceFileTemplate, string? copyright, LanguageVersion languageVersion)
 	{
 		Ensure.NotNull(sourceFileTemplate);
 
-		WriteFileHeader(codeBlocker, copyright);
-		codeBlocker.AddSourceFile(sourceFileTemplate);
+		WriteFileHeader(codeBlocker, copyright, languageVersion);
+		if (string.IsNullOrEmpty(sourceFileTemplate.Namespace)
+			|| languageVersion.MapSpecifiedToEffectiveVersion() >= LanguageVersion.CSharp10)
+		{
+			codeBlocker.AddSourceFile(sourceFileTemplate);
+			return;
+		}
+
+		// ktsu.CodeBlocker only writes file-scoped namespaces, so the block is written here around a
+		// copy of the template without one. Usings are legal inside a namespace block.
+		SourceFileTemplate withoutNamespace = new()
+		{
+			FileName = sourceFileTemplate.FileName,
+		};
+		foreach (string usingDirective in sourceFileTemplate.Usings)
+		{
+			withoutNamespace.Usings.Add(usingDirective);
+		}
+
+		foreach (ClassTemplate classTemplate in sourceFileTemplate.Classes)
+		{
+			withoutNamespace.Classes.Add(classTemplate);
+		}
+
+		codeBlocker.WriteLine($"namespace {sourceFileTemplate.Namespace}");
+		using (new Scope(codeBlocker))
+		{
+			codeBlocker.AddSourceFile(withoutNamespace);
+		}
 	}
 
 	/// <summary>

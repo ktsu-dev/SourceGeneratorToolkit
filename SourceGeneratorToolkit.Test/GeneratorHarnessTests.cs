@@ -30,6 +30,67 @@ public sealed class GeneratorHarnessTests
 	}
 
 	[TestMethod]
+	[DataRow(LanguageVersion.CSharp7_3)]
+	[DataRow(LanguageVersion.CSharp8)]
+	[DataRow(LanguageVersion.CSharp9)]
+	[DataRow(LanguageVersion.CSharp10)]
+	[DataRow(LanguageVersion.Latest)]
+	public void ANamespacedSourceFileCompilesForTheConsumersLanguageVersion(LanguageVersion languageVersion)
+	{
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = languageVersion };
+
+		GeneratorRunResult result = harness.Run(new ThingsGenerator());
+
+		SyntaxTree tree = result.GeneratedSources[0].SyntaxTree;
+		string text = tree.GetText().ToString();
+		CSharpCompilation compilation = CompileAsConsumer(tree);
+		Diagnostic[] errors = [.. compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
+
+		Assert.AreEqual(0, errors.Length, $"{string.Join("\n", errors)}\n{text}");
+		Assert.IsNotNull(compilation.GetTypeByMetadataName("Generated.Alpha"), text);
+	}
+
+	/// <summary>
+	/// Compiles a generated tree the way the consumer's build would, at the tree's own language version.
+	/// </summary>
+	/// <remarks>
+	/// A parse alone is not enough: a file-scoped namespace below C# 10 parses cleanly and only fails
+	/// to compile (CS8370/CS8773).
+	/// </remarks>
+	private static CSharpCompilation CompileAsConsumer(SyntaxTree tree) =>
+		CSharpCompilation.Create(
+			"Consumer",
+			[tree],
+			[MetadataReference.CreateFromFile(typeof(object).Assembly.Location)],
+			new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+
+	[TestMethod]
+	[DataRow(LanguageVersion.CSharp7_3)]
+	[DataRow(LanguageVersion.CSharp9)]
+	public void ANamespacedSourceFileForAConsumerBeforeCSharp10IsBlockScoped(LanguageVersion languageVersion)
+	{
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = languageVersion };
+
+		string text = harness.Run(new ThingsGenerator()).GeneratedSources[0].SourceText.ToString();
+
+		StringAssert.Contains(text, "namespace Generated\n{\n", text);
+		Assert.IsFalse(text.Contains("namespace Generated;", StringComparison.Ordinal), text);
+	}
+
+	[TestMethod]
+	[DataRow(LanguageVersion.CSharp10)]
+	[DataRow(LanguageVersion.Default)]
+	[DataRow(LanguageVersion.Latest)]
+	public void ANamespacedSourceFileForACSharp10OrLaterConsumerIsFileScoped(LanguageVersion languageVersion)
+	{
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = languageVersion };
+
+		string text = harness.Run(new ThingsGenerator()).GeneratedSources[0].SourceText.ToString();
+
+		StringAssert.Contains(text, "namespace Generated;\n", text);
+	}
+
+	[TestMethod]
 	[DataRow(LanguageVersion.CSharp8)]
 	[DataRow(LanguageVersion.Default)]
 	[DataRow(LanguageVersion.Latest)]

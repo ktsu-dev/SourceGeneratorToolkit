@@ -160,6 +160,27 @@ public sealed class GeneratorBaseTests
 		Assert.IsTrue(MetadataFile.DefaultSerializerOptions.IsReadOnly, "A shared instance must not be mutable by a consumer.");
 
 	[TestMethod]
+	public void ANullDiagnosticCatalogueIsRefused()
+	{
+		GeneratorRunResult result = Harness.Run(new NullCatalogGenerator());
+
+		Assert.IsInstanceOfType<InvalidOperationException>(result.Exception);
+		StringAssert.Contains(result.Exception.Message, "NullCatalogGenerator.Diagnostics returned null");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+	}
+
+	[TestMethod]
+	public void ADescriptorFromAnotherCatalogueIsRefused()
+	{
+		GeneratorRunResult result = Harness.Run(new MismatchedCatalogGenerator());
+
+		Assert.IsInstanceOfType<InvalidOperationException>(result.Exception);
+		StringAssert.Contains(result.Exception.Message, "MismatchedCatalogGenerator.MetadataFileMissing (TST001)");
+		StringAssert.Contains(result.Exception.Message, "'Other' catalogue");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+	}
+
+	[TestMethod]
 	public void AMalformedMetadataFileIsReportedRatherThanSwallowed()
 	{
 		GeneratorRunResult result = Harness.Run(
@@ -439,7 +460,7 @@ public sealed class GeneratorBaseTests
 	}
 
 	/// <summary>
-	/// Compiles a <see cref="GeneratorBase.WriteSourceFile"/> class holding a <c>string?</c> and a
+	/// Compiles a <see cref="GeneratorBase.WriteSourceFile(ktsu.CodeBlocker.CodeBlocker, ktsu.CodeBlocker.Templates.SourceFileTemplate, string?)"/> class holding a <c>string?</c> and a
 	/// <c>string</c> member, next to a consumer statement, the way a nullable-enabled project would.
 	/// </summary>
 	private static ImmutableArray<Diagnostic> CompileWithConsumer(string statement)
