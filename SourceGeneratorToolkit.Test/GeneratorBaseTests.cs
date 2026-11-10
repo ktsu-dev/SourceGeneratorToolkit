@@ -121,6 +121,27 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
+	public void ANullDiagnosticCatalogueIsRefused()
+	{
+		GeneratorRunResult result = Harness.Run(new NullCatalogGenerator());
+
+		Assert.IsInstanceOfType<InvalidOperationException>(result.Exception);
+		StringAssert.Contains(result.Exception.Message, "NullCatalogGenerator.Diagnostics returned null");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+	}
+
+	[TestMethod]
+	public void ADescriptorFromAnotherCatalogueIsRefused()
+	{
+		GeneratorRunResult result = Harness.Run(new MismatchedCatalogGenerator());
+
+		Assert.IsInstanceOfType<InvalidOperationException>(result.Exception);
+		StringAssert.Contains(result.Exception.Message, "MismatchedCatalogGenerator.MetadataFileMissing (TST001)");
+		StringAssert.Contains(result.Exception.Message, "'Other' catalogue");
+		Assert.AreEqual(0, result.GeneratedSources.Length);
+	}
+
+	[TestMethod]
 	public void AMalformedMetadataFileIsReportedRatherThanSwallowed()
 	{
 		GeneratorRunResult result = Harness.Run(
