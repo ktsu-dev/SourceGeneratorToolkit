@@ -243,15 +243,64 @@ public abstract class GeneratorBase : IIncrementalGenerator
 	/// <param name="codeBlocker">The <see cref="CodeBlocker"/> to write to.</param>
 	/// <param name="sourceFileTemplate">The file to write.</param>
 	/// <param name="copyright">The copyright line, as for <see cref="WriteFileHeader(CodeBlocker, string?)"/>.</param>
+	/// <remarks>
+	/// As with <see cref="WriteFileHeader(CodeBlocker, string?)"/>, the output matches the consuming
+	/// compilation's language version when called from <see cref="Generate"/>, and the latest version
+	/// anywhere else. Use the overload that takes a <see cref="LanguageVersion"/> to choose explicitly.
+	/// </remarks>
 	/// <exception cref="ArgumentNullException">
 	/// <paramref name="codeBlocker"/> or <paramref name="sourceFileTemplate"/> is <see langword="null"/>.
 	/// </exception>
-	protected static void WriteSourceFile(CodeBlocker codeBlocker, SourceFileTemplate sourceFileTemplate, string? copyright)
+	protected static void WriteSourceFile(CodeBlocker codeBlocker, SourceFileTemplate sourceFileTemplate, string? copyright) =>
+		WriteSourceFile(codeBlocker, sourceFileTemplate, copyright, consumerLanguageVersion ?? LanguageVersion.Latest);
+
+	/// <summary>
+	/// Writes a whole source file, header included, for a consumer on the given language version.
+	/// </summary>
+	/// <param name="codeBlocker">The <see cref="CodeBlocker"/> to write to.</param>
+	/// <param name="sourceFileTemplate">The file to write.</param>
+	/// <param name="copyright">The copyright line, as for <see cref="WriteFileHeader(CodeBlocker, string?)"/>.</param>
+	/// <param name="languageVersion">
+	/// The consuming compilation's language version. The template's namespace is file-scoped for C# 10
+	/// and later, and a block around the file's contents before that, where a file-scoped namespace
+	/// does not compile (CS8370/CS8773).
+	/// </param>
+	/// <exception cref="ArgumentNullException">
+	/// <paramref name="codeBlocker"/> or <paramref name="sourceFileTemplate"/> is <see langword="null"/>.
+	/// </exception>
+	protected static void WriteSourceFile(CodeBlocker codeBlocker, SourceFileTemplate sourceFileTemplate, string? copyright, LanguageVersion languageVersion)
 	{
 		Ensure.NotNull(sourceFileTemplate);
 
-		WriteFileHeader(codeBlocker, copyright);
-		codeBlocker.AddSourceFile(sourceFileTemplate);
+		WriteFileHeader(codeBlocker, copyright, languageVersion);
+		if (string.IsNullOrEmpty(sourceFileTemplate.Namespace)
+			|| languageVersion.MapSpecifiedToEffectiveVersion() >= LanguageVersion.CSharp10)
+		{
+			codeBlocker.AddSourceFile(sourceFileTemplate);
+			return;
+		}
+
+		// ktsu.CodeBlocker only writes file-scoped namespaces, so the block is written here around a
+		// copy of the template without one. Usings are legal inside a namespace block.
+		SourceFileTemplate withoutNamespace = new()
+		{
+			FileName = sourceFileTemplate.FileName,
+		};
+		foreach (string usingDirective in sourceFileTemplate.Usings)
+		{
+			withoutNamespace.Usings.Add(usingDirective);
+		}
+
+		foreach (ClassTemplate classTemplate in sourceFileTemplate.Classes)
+		{
+			withoutNamespace.Classes.Add(classTemplate);
+		}
+
+		codeBlocker.WriteLine($"namespace {sourceFileTemplate.Namespace}");
+		using (new Scope(codeBlocker))
+		{
+			codeBlocker.AddSourceFile(withoutNamespace);
+		}
 	}
 
 	/// <summary>

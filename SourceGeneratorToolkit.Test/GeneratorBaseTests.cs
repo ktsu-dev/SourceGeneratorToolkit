@@ -400,7 +400,7 @@ public sealed class GeneratorBaseTests
 	}
 
 	/// <summary>
-	/// Compiles a <see cref="GeneratorBase.WriteSourceFile"/> class holding a <c>string?</c> and a
+	/// Compiles a <see cref="GeneratorBase.WriteSourceFile(ktsu.CodeBlocker.CodeBlocker, ktsu.CodeBlocker.Templates.SourceFileTemplate, string?)"/> class holding a <c>string?</c> and a
 	/// <c>string</c> member, next to a consumer statement, the way a nullable-enabled project would.
 	/// </summary>
 	private static ImmutableArray<Diagnostic> CompileWithConsumer(string statement)
