@@ -2,6 +2,9 @@
 
 Changes since v1.2.0:
 
+- Point scoped FindLocation at the anchor's own entry when the needle is written first [patch] (#67) (matt-edmondson)
+- Refuse a diagnostic catalogue the built-in descriptors weren't allocated from [patch] (#70) (matt-edmondson)
+- Write a block-scoped namespace for consumers below C# 10 [minor] (#72) (matt-edmondson)
 - Add a SessionStart hook for Claude Code cloud sessions (#52) (matt-edmondson)
 - Report same-named metadata files whose contents differ [patch] (#64) (matt-edmondson)
 - Report any exception from model code instead of crashing the generator [patch] (#65) (matt-edmondson)
