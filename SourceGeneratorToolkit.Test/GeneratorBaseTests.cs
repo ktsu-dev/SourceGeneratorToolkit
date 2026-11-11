@@ -121,6 +121,45 @@ public sealed class GeneratorBaseTests
 	}
 
 	[TestMethod]
+	public void AHandWrittenMetadataFileWithCommentsAndTrailingCommasParses()
+	{
+		const string text = """
+			{
+			  // The things this compilation declares.
+			  "things": [
+			    { "name": "Alpha", "kind": "first", },
+			    /* Beta comes second. */
+			    { "name": "Beta", "kind": "second" },
+			  ],
+			}
+			""";
+
+		GeneratorRunResult result = Harness.Run(
+			new ThingsGenerator(),
+			new Dictionary<string, string> { ["things.json"] = text });
+
+		Assert.AreEqual(0, result.Diagnostics.Length, string.Join("; ", result.Diagnostics));
+		string source = result.GeneratedSources.Single().SourceText.ToString();
+		StringAssert.Contains(source, "class Alpha");
+		StringAssert.Contains(source, "class Beta");
+	}
+
+	[TestMethod]
+	public void AGeneratorCanOverrideTheMetadataSerializerOptions()
+	{
+		GeneratorRunResult result = Harness.Run(
+			new EnumByNameGenerator(),
+			new Dictionary<string, string> { ["things.json"] = """{ "things": [ { "name": "Alpha", "kind": "Second" } ] }""" });
+
+		Assert.AreEqual(0, result.Diagnostics.Length, string.Join("; ", result.Diagnostics));
+		StringAssert.Contains(result.GeneratedSources.Single().SourceText.ToString(), "// Alpha: Second");
+	}
+
+	[TestMethod]
+	public void TheDefaultMetadataSerializerOptionsAreReadOnly() =>
+		Assert.IsTrue(MetadataFile.DefaultSerializerOptions.IsReadOnly, "A shared instance must not be mutable by a consumer.");
+
+	[TestMethod]
 	public void ANullDiagnosticCatalogueIsRefused()
 	{
 		GeneratorRunResult result = Harness.Run(new NullCatalogGenerator());
