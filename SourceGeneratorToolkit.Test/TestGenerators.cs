@@ -147,6 +147,46 @@ internal sealed class ThingsGenerator() : GeneratorBase<ThingsMetadata>("things.
 }
 
 /// <summary>
+/// Emits one type per entry in <c>things.json</c> into a file that also carries a using, an assembly
+/// attribute named through that using, and a file comment: the parts that have to stay outside a
+/// block-scoped namespace.
+/// </summary>
+internal sealed class AttributedThingsGenerator() : GeneratorBase<ThingsMetadata>("things.json")
+{
+	internal const string FileComment = "// Generated from things.json";
+
+	protected override DiagnosticCatalog Diagnostics => TestDiagnostics.Catalog;
+
+	protected override DiagnosticDescriptor MetadataFileMissing => TestDiagnostics.MetadataFileMissing;
+
+	protected override DiagnosticDescriptor MetadataParseFailed => TestDiagnostics.MetadataParseFailed;
+
+	protected override void Generate(SourceProductionContext context, ThingsMetadata metadata, CodeBlocker codeBlocker)
+	{
+		SourceFileTemplate file = new()
+		{
+			Namespace = "Generated",
+			Usings = { "System" },
+			Attributes = { "assembly: CLSCompliant(true)" },
+			Comments = { FileComment },
+		};
+
+		foreach (ThingDefinition thing in metadata.Things)
+		{
+			file.Classes.Add(new ClassTemplate
+			{
+				Name = thing.Name,
+				Kind = ktsu.CodeBlocker.Templates.TypeKind.Class,
+				Keywords = { CSharpKeywords.Public },
+			});
+		}
+
+		WriteSourceFile(codeBlocker, file, TestDiagnostics.Copyright);
+		context.AddSource("AttributedThings.g.cs", codeBlocker.ToString());
+	}
+}
+
+/// <summary>
 /// Reads both metadata files. Exercises <see cref="GeneratorBase"/> directly, which is the shape
 /// that used to be reimplemented per generator to get around a single-file base.
 /// </summary>

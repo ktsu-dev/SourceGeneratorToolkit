@@ -322,19 +322,46 @@ public abstract class GeneratorBase : IIncrementalGenerator
 		}
 
 		// ktsu.CodeBlocker only writes file-scoped namespaces, so the block is written here around a
-		// copy of the template without one. Usings are legal inside a namespace block.
+		// copy of the template without one. What can't live inside a namespace block is written first,
+		// from a copy holding nothing else: the file's documentation and comments, and its global
+		// (assembly:/module:) attributes, which C# only accepts after every using and before the
+		// namespace. A file with attributes writes its usings there too, so the attributes can be named
+		// through them, as CodeBlocker does for a file-scoped namespace; otherwise the usings stay
+		// inside the block.
+		bool hasAttributes = sourceFileTemplate.Attributes.Count > 0;
+		SourceFileTemplate outsideNamespace = new()
+		{
+			FileName = sourceFileTemplate.FileName,
+			Documentation = sourceFileTemplate.Documentation,
+		};
 		SourceFileTemplate withoutNamespace = new()
 		{
 			FileName = sourceFileTemplate.FileName,
 		};
+
+		foreach (string comment in sourceFileTemplate.Comments)
+		{
+			outsideNamespace.Comments.Add(comment);
+		}
+
+		foreach (string attribute in sourceFileTemplate.Attributes)
+		{
+			outsideNamespace.Attributes.Add(attribute);
+		}
+
 		foreach (string usingDirective in sourceFileTemplate.Usings)
 		{
-			withoutNamespace.Usings.Add(usingDirective);
+			(hasAttributes ? outsideNamespace : withoutNamespace).Usings.Add(usingDirective);
 		}
 
 		foreach (ClassTemplate classTemplate in sourceFileTemplate.Classes)
 		{
 			withoutNamespace.Classes.Add(classTemplate);
+		}
+
+		if (hasAttributes || outsideNamespace.Comments.Count > 0 || outsideNamespace.Documentation is not null)
+		{
+			codeBlocker.AddSourceFile(outsideNamespace);
 		}
 
 		codeBlocker.WriteLine($"namespace {sourceFileTemplate.Namespace}");
