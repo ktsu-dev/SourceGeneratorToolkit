@@ -222,6 +222,105 @@ public sealed class MetadataFileTests
 		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
 	}
 
+	private const string EscapedValues = """
+		{
+		  "things": [
+		    { "name": "Alpha", "pattern": "C:\\temp" },
+		    { "name": "Caf\u00e9" },
+		    { "name": "say \"hi\"" },
+		    { "name": "\u03A9\u00B7m\u00b2", "pattern": "C:\\temp" }
+		  ]
+		}
+		""";
+
+	private static MetadataFile CreateEscaped() =>
+		new("things.json", EscapedValues, SourceText.From(EscapedValues), "/repo/things.json");
+
+	private static string TextAt(Location location) =>
+		EscapedValues.Substring(location.SourceSpan.Start, location.SourceSpan.Length);
+
+	[TestMethod]
+	public void FindLocationFindsAValueWrittenWithAnEscapedBackslash()
+	{
+		MetadataFile file = CreateEscaped();
+
+		Location location = file.FindLocation(@"C:\temp");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual(@"C:\\temp", TextAt(location));
+	}
+
+	[TestMethod]
+	public void FindLocationFindsAValueWrittenWithAnEscapedQuote()
+	{
+		MetadataFile file = CreateEscaped();
+
+		Location location = file.FindLocation("say \"hi\"");
+
+		Assert.AreEqual(4, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual(@"say \""hi\""", TextAt(location));
+	}
+
+	[TestMethod]
+	public void FindLocationFindsAValueWrittenWithLowercaseUnicodeEscapes()
+	{
+		MetadataFile file = CreateEscaped();
+
+		Location location = file.FindLocation("Café");
+
+		Assert.AreEqual(3, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual(@"Caf\u00e9", TextAt(location));
+	}
+
+	[TestMethod]
+	public void FindLocationFindsAValueWrittenWithMixedCaseUnicodeEscapes()
+	{
+		MetadataFile file = CreateEscaped();
+
+		Location location = file.FindLocation("Ω·m²");
+
+		Assert.AreEqual(5, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual(@"\u03A9\u00B7m\u00b2", TextAt(location));
+	}
+
+	[TestMethod]
+	public void ScopedFindLocationFindsAnEscapedNeedleInTheAnchorsEntry()
+	{
+		MetadataFile file = CreateEscaped();
+
+		Location location = file.FindLocation("Ω·m²", @"C:\temp");
+
+		Assert.AreEqual(5, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual(@"C:\\temp", TextAt(location));
+	}
+
+	[TestMethod]
+	public void ScopedFindLocationFindsAPlainNeedleAfterAnEscapedAnchor()
+	{
+		MetadataFile file = CreateEscaped();
+
+		Location location = file.FindLocation("Alpha", @"C:\temp");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+		Assert.AreEqual(@"C:\\temp", TextAt(location));
+	}
+
+	[TestMethod]
+	public void FindLocationIgnoresAQuoteInsideAComment()
+	{
+		const string text = """
+			{
+			  // the "old" name
+			  "name": "old"
+			}
+			""";
+		MetadataFile file = new("things.json", text, SourceText.From(text), "/repo/things.json");
+
+		Location location = file.FindLocation("old");
+
+		Assert.AreEqual(2, location.GetLineSpan().StartLinePosition.Line);
+	}
+
 	[TestMethod]
 	public void ScopedFindLocationReturnsNoneForAnEmptyNeedle()
 	{

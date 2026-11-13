@@ -103,8 +103,8 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return Location.None;
 		}
 
-		int index = IndexOfToken(needle, 0);
-		return index < 0 ? Location.None : LocationAt(index, needle.Length);
+		int index = IndexOfToken(needle, 0, out int length);
+		return index < 0 ? Location.None : LocationAt(index, length);
 	}
 
 	/// <summary>
@@ -138,28 +138,29 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 			return Location.None;
 		}
 
-		int scope = string.IsNullOrEmpty(anchor) ? 0 : IndexOfToken(anchor, 0);
+		int scope = string.IsNullOrEmpty(anchor) ? 0 : IndexOfToken(anchor, 0, out _);
 		if (scope < 0)
 		{
 			return FindLocation(needle);
 		}
 
 		int index = -1;
+		int length = 0;
 		if (TryGetEnclosingObject(scope, out int open, out int close))
 		{
-			index = IndexOfToken(needle, scope, close);
+			index = IndexOfToken(needle, scope, close, out length);
 			if (index < 0)
 			{
-				index = IndexOfToken(needle, open, scope);
+				index = IndexOfToken(needle, open, scope, out length);
 			}
 		}
 
 		if (index < 0)
 		{
-			index = IndexOfToken(needle, scope);
+			index = IndexOfToken(needle, scope, out length);
 		}
 
-		return index < 0 ? FindLocation(needle) : LocationAt(index, needle.Length);
+		return index < 0 ? FindLocation(needle) : LocationAt(index, length);
 	}
 
 	/// <summary>
@@ -246,14 +247,15 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// </summary>
 	/// <param name="value">The text to find.</param>
 	/// <param name="startIndex">Where the search starts.</param>
+	/// <param name="length">The length of the match in the file.</param>
 	/// <returns>The index of the text itself, inside its quotes when it was found quoted, or -1.</returns>
 	/// <remarks>
 	/// A plain substring search lands inside longer names: <c>Meter</c> is found in
-	/// <c>"SquareMeter"</c>, which is a different entry. Looking for <c>"Meter"</c> first matches
+	/// <c>"SquareMeter"</c>, which is a different entry. Matching whole JSON strings first finds
 	/// only the whole string. The raw search remains the fallback so that text which is not a JSON
 	/// string on its own, such as a number or an already quoted anchor, is still found.
 	/// </remarks>
-	private int IndexOfToken(string value, int startIndex) => IndexOfToken(value, startIndex, Text.Length);
+	private int IndexOfToken(string value, int startIndex, out int length) => IndexOfToken(value, startIndex, Text.Length, out length);
 
 	/// <summary>
 	/// Finds <paramref name="value"/> between <paramref name="startIndex"/> and
@@ -262,17 +264,232 @@ public sealed class MetadataFile(string fileName, string text, SourceText? sourc
 	/// <param name="value">The text to find.</param>
 	/// <param name="startIndex">Where the search starts.</param>
 	/// <param name="endIndex">Where the search ends; a match must lie wholly before it.</param>
+	/// <param name="length">
+	/// The length of the match in the file. For a JSON string it is the length of the literal's
+	/// escaped contents, which can differ from the length of <paramref name="value"/>.
+	/// </param>
 	/// <returns>The index of the text itself, inside its quotes when it was found quoted, or -1.</returns>
-	private int IndexOfToken(string value, int startIndex, int endIndex)
+	/// <remarks>
+	/// A generator passes a value it got back from deserializing the file, which is unescaped, while
+	/// the file holds the escaped JSON form: <c>C:\temp</c> is written <c>"C:\\temp"</c>, and
+	/// System.Text.Json writes <c>Ω</c> as <c>"\u03A9"</c>. So each string literal is decoded and
+	/// compared with the value, rather than the value being searched for in the raw text (#68).
+	/// </remarks>
+	private int IndexOfToken(string value, int startIndex, int endIndex, out int length)
 	{
-		int count = endIndex - startIndex;
-		if (count <= 0)
+		length = 0;
+		if (endIndex - startIndex <= 0)
 		{
 			return -1;
 		}
 
-		int quoted = Text.IndexOf("\"" + value + "\"", startIndex, count, StringComparison.Ordinal);
-		return quoted >= 0 ? quoted + 1 : Text.IndexOf(value, startIndex, count, StringComparison.Ordinal);
+		foreach (StringLiteral literal in GetStringLiterals())
+		{
+			if (literal.OpeningQuote < startIndex)
+			{
+				continue;
+			}
+
+			if (literal.ClosingQuote >= endIndex)
+			{
+				break;
+			}
+
+			if (string.Equals(literal.Value, value, StringComparison.Ordinal))
+			{
+				length = literal.ClosingQuote - literal.OpeningQuote - 1;
+				return literal.OpeningQuote + 1;
+			}
+		}
+
+		int raw = Text.IndexOf(value, startIndex, endIndex - startIndex, StringComparison.Ordinal);
+		length = raw < 0 ? 0 : value.Length;
+		return raw;
+	}
+
+	/// <summary>
+	/// A string literal in the file: where its quotes are and what it decodes to.
+	/// </summary>
+	/// <param name="OpeningQuote">The index of the opening quote.</param>
+	/// <param name="ClosingQuote">The index of the closing quote.</param>
+	/// <param name="Value">
+	/// The decoded string, or <see langword="null"/> when the literal holds an escape JSON does not allow.
+	/// </param>
+	private readonly record struct StringLiteral(int OpeningQuote, int ClosingQuote, string? Value);
+
+	private List<StringLiteral>? stringLiterals;
+
+	/// <summary>
+	/// Gets the file's string literals, in order, scanning the file the first time they are needed.
+	/// </summary>
+	/// <returns>The closed string literals outside comments.</returns>
+	/// <remarks>
+	/// The file is scanned from the start, as in <see cref="TryGetEnclosingObject"/>, because only a
+	/// forward scan can tell which quotes open a string. <c>//</c> and <c>/* */</c> comments are skipped,
+	/// since <see cref="DefaultSerializerOptions"/> accepts them and a quote inside one opens no string.
+	/// An unclosed literal at the end of the file is left out.
+	/// </remarks>
+	private List<StringLiteral> GetStringLiterals()
+	{
+		if (stringLiterals is not null)
+		{
+			return stringLiterals;
+		}
+
+		List<StringLiteral> literals = [];
+		int i = 0;
+		while (i < Text.Length)
+		{
+			if (Text[i] == '"')
+			{
+				int close = ClosingQuoteOf(i);
+				if (close < 0)
+				{
+					break;
+				}
+
+				literals.Add(new StringLiteral(i, close, Unescape(i + 1, close)));
+				i = close + 1;
+			}
+			else
+			{
+				i = PastComment(i);
+			}
+		}
+
+		stringLiterals = literals;
+		return literals;
+	}
+
+	/// <summary>
+	/// Moves past a <c>//</c> or <c>/* */</c> comment starting at <paramref name="index"/>, or past one
+	/// character when none starts there.
+	/// </summary>
+	/// <param name="index">A position outside any string.</param>
+	/// <returns>The index after the comment, or after the character.</returns>
+	private int PastComment(int index)
+	{
+		if (Text[index] != '/' || index + 1 >= Text.Length)
+		{
+			return index + 1;
+		}
+
+		if (Text[index + 1] == '/')
+		{
+			int lineFeed = Text.IndexOf('\n', index);
+			return lineFeed < 0 ? Text.Length : lineFeed + 1;
+		}
+
+		if (Text[index + 1] == '*')
+		{
+			int end = Text.IndexOf("*/", index + 2, StringComparison.Ordinal);
+			return end < 0 ? Text.Length : end + 2;
+		}
+
+		return index + 1;
+	}
+
+	/// <summary>
+	/// Finds the quote that closes the string opened at <paramref name="openingQuote"/>.
+	/// </summary>
+	/// <param name="openingQuote">The index of the opening quote.</param>
+	/// <returns>The index of the closing quote, or -1 when the string is not closed.</returns>
+	private int ClosingQuoteOf(int openingQuote)
+	{
+		int i = openingQuote + 1;
+		while (i < Text.Length)
+		{
+			if (Text[i] == '"')
+			{
+				return i;
+			}
+
+			// A backslash escapes the character after it, so an escaped quote does not close the string.
+			i += Text[i] == '\\' ? 2 : 1;
+		}
+
+		return -1;
+	}
+
+	/// <summary>
+	/// Decodes the contents of a JSON string literal.
+	/// </summary>
+	/// <param name="start">The index of the first character after the opening quote.</param>
+	/// <param name="end">The index of the closing quote.</param>
+	/// <returns>The decoded string, or <see langword="null"/> when it holds an escape JSON does not allow.</returns>
+	private string? Unescape(int start, int end)
+	{
+		int backslash = Text.IndexOf('\\', start, end - start);
+		if (backslash < 0)
+		{
+			return Text[start..end];
+		}
+
+		System.Text.StringBuilder decoded = new(end - start);
+		decoded.Append(Text, start, backslash - start);
+		int i = backslash;
+		while (i < end)
+		{
+			if (Text[i] != '\\')
+			{
+				decoded.Append(Text[i]);
+				i++;
+			}
+			else if (!TryAppendEscape(i, end, decoded, out i))
+			{
+				return null;
+			}
+		}
+
+		return decoded.ToString();
+	}
+
+	/// <summary>
+	/// Decodes the escape sequence whose backslash is at <paramref name="backslash"/>.
+	/// </summary>
+	/// <param name="backslash">The index of the backslash.</param>
+	/// <param name="end">The index of the closing quote.</param>
+	/// <param name="decoded">The decoded text, which the escaped character is appended to.</param>
+	/// <param name="next">The index after the escape sequence.</param>
+	/// <returns><see langword="false"/> when the escape is one JSON does not allow.</returns>
+	private bool TryAppendEscape(int backslash, int end, System.Text.StringBuilder decoded, out int next)
+	{
+		next = backslash + 2;
+		if (next > end)
+		{
+			return false;
+		}
+
+		char escape = Text[backslash + 1];
+		if (escape == 'u')
+		{
+			next = backslash + 6;
+			if (next > end || !ushort.TryParse(Text.Substring(backslash + 2, 4), System.Globalization.NumberStyles.AllowHexSpecifier, System.Globalization.CultureInfo.InvariantCulture, out ushort code))
+			{
+				return false;
+			}
+
+			decoded.Append((char)code);
+			return true;
+		}
+
+		char? unescaped = escape switch
+		{
+			'"' or '\\' or '/' => escape,
+			'b' => '\b',
+			'f' => '\f',
+			'n' => '\n',
+			'r' => '\r',
+			't' => '\t',
+			_ => null,
+		};
+		if (unescaped is not char simple)
+		{
+			return false;
+		}
+
+		decoded.Append(simple);
+		return true;
 	}
 
 	/// <summary>
