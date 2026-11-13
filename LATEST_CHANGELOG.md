@@ -1,7 +1,7 @@
-## v1.4.1-pre.1 (prerelease)
+## v1.4.1 (patch)
 
 Changes since v1.4.0:
 
-- Bump MSTest.Sdk from 4.5.2 to 4.5.3 (dependabot[bot])
-- Bump the ktsu group with 10 updates (dependabot[bot])
+- Find metadata values the file writes with JSON escapes [patch] (#76) (matt-edmondson)
+- Keep a file's assembly attributes and comments below C# 10 [patch] (#79) (matt-edmondson)
 
