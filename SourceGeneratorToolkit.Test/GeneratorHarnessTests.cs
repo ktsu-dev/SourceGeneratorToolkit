@@ -78,6 +78,46 @@ public sealed class GeneratorHarnessTests
 	}
 
 	[TestMethod]
+	[DataRow(LanguageVersion.CSharp7_3)]
+	[DataRow(LanguageVersion.CSharp9)]
+	[DataRow(LanguageVersion.CSharp10)]
+	[DataRow(LanguageVersion.Latest)]
+	public void AFilesAssemblyAttributesAndCommentsAreKeptAtEveryLanguageVersion(LanguageVersion languageVersion)
+	{
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = languageVersion };
+
+		SyntaxTree tree = harness.Run(new AttributedThingsGenerator()).GeneratedSources[0].SyntaxTree;
+		string text = tree.GetText().ToString();
+		CSharpCompilation compilation = CompileAsConsumer(tree);
+		Diagnostic[] errors = [.. compilation.GetDiagnostics().Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)];
+
+		Assert.AreEqual(0, errors.Length, $"{string.Join("\n", errors)}\n{text}");
+		Assert.IsTrue(
+			compilation.Assembly.GetAttributes().Any(attribute => attribute.AttributeClass?.Name == nameof(CLSCompliantAttribute)),
+			text);
+		StringAssert.Contains(text, AttributedThingsGenerator.FileComment, text);
+		Assert.IsNotNull(compilation.GetTypeByMetadataName("Generated.Alpha"), text);
+	}
+
+	[TestMethod]
+	[DataRow(LanguageVersion.CSharp7_3)]
+	[DataRow(LanguageVersion.CSharp9)]
+	public void AFilesAssemblyAttributesAndCommentsPrecedeABlockScopedNamespace(LanguageVersion languageVersion)
+	{
+		GeneratorHarness harness = new(MetadataDirectory) { LanguageVersion = languageVersion };
+
+		string text = harness.Run(new AttributedThingsGenerator()).GeneratedSources[0].SourceText.ToString();
+		int namespaceAt = text.IndexOf("namespace Generated\n{\n", StringComparison.Ordinal);
+
+		Assert.IsGreaterThan(-1, namespaceAt, text);
+		foreach (string beforeNamespace in new[] { AttributedThingsGenerator.FileComment, "using System;", "[assembly: CLSCompliant(true)]" })
+		{
+			int at = text.IndexOf(beforeNamespace, StringComparison.Ordinal);
+			Assert.IsTrue(at >= 0 && at < namespaceAt, $"'{beforeNamespace}' should be written before the namespace block.\n{text}");
+		}
+	}
+
+	[TestMethod]
 	[DataRow(LanguageVersion.CSharp10)]
 	[DataRow(LanguageVersion.Default)]
 	[DataRow(LanguageVersion.Latest)]
