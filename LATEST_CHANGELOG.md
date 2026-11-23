@@ -1,7 +1,6 @@
-## v1.4.1 (patch)
+## v1.4.2-pre.1 (prerelease)
 
-Changes since v1.4.0:
+Changes since v1.4.1:
 
-- Find metadata values the file writes with JSON escapes [patch] (#76) (matt-edmondson)
-- Keep a file's assembly attributes and comments below C# 10 [patch] (#79) (matt-edmondson)
+- Bump Polyfill from 11.4.5 to 12.0.0 (dependabot[bot])
 
